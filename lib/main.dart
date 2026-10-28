@@ -6,6 +6,8 @@ import 'core/execution/execution_controller.dart';
 import 'core/lsp/diagnostics/diagnostics_service.dart';
 import 'core/lsp/registry/lsp_server_registry.dart';
 import 'core/theme/editor_theme.dart';
+import 'core/terminal/services/terminal_service.dart';
+import 'core/terminal/services/terminal_scope.dart';
 import 'layout/controllers/editor_controller.dart';
 import 'layout/controllers/layout_controller.dart';
 import 'layout/controllers/lsp_and_execution_scope.dart';
@@ -31,6 +33,7 @@ class _CodeEditorAppState extends State<CodeEditorApp> {
   late final EditorDocumentsController _documentsController;
   late final DiagnosticsService _diagnosticsService;
   late final ExecutionController _executionController;
+  late final TerminalService _terminalService;
   late final LspServerRegistry _lspRegistry;
   late final FileExplorerController _fileExplorerController;
 
@@ -41,6 +44,7 @@ class _CodeEditorAppState extends State<CodeEditorApp> {
     _documentsController = EditorDocumentsController();
     _diagnosticsService = DiagnosticsService();
     _executionController = ExecutionController();
+    _terminalService = TerminalService();
     _fileExplorerController = FileExplorerController(
       fileService: FileSystemService(),
       watcherService: FileWatcherService(),
@@ -59,6 +63,7 @@ class _CodeEditorAppState extends State<CodeEditorApp> {
     _documentsController.dispose();
     _fileExplorerController.dispose();
     _executionController.dispose();
+    _terminalService.dispose();
     _diagnosticsService.dispose();
     _lspRegistry.shutdownAll();
     super.dispose();
@@ -82,7 +87,9 @@ class _CodeEditorAppState extends State<CodeEditorApp> {
                 notifier: _documentsController,
                 child: FileExplorerScope(
                   notifier: _fileExplorerController,
-                  child: MaterialApp(
+                  child: TerminalScope(
+                    notifier: _terminalService,
+                    child: MaterialApp(
                     title: 'Modern Code Editor',
                     debugShowCheckedModeBanner: false,
                     theme: ThemeData.dark().copyWith(
@@ -95,6 +102,7 @@ class _CodeEditorAppState extends State<CodeEditorApp> {
                       ),
                     ),
                     home: const WorkbenchScaffold(),
+                    ),
                   ),
                 ),
               ),

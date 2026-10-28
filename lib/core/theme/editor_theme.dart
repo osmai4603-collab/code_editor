@@ -43,6 +43,11 @@ class EditorThemeData {
   final Color commandCenterBorder;
   final Color commandCenterForeground;
   final Color accentColor;
+  final Color terminalBackground;
+  final Color terminalForeground;
+  final Color terminalCursor;
+  final Color terminalSelectionBackground;
+  final List<Color> terminalAnsiColors;
 
   const EditorThemeData({
     required this.titleBarBackground,
@@ -85,6 +90,11 @@ class EditorThemeData {
     required this.commandCenterBorder,
     required this.commandCenterForeground,
     required this.accentColor,
+    required this.terminalBackground,
+    required this.terminalForeground,
+    required this.terminalCursor,
+    required this.terminalSelectionBackground,
+    required this.terminalAnsiColors,
   });
 
   /// الثيم الداكن الافتراضي (Dark Modern)
@@ -129,6 +139,28 @@ class EditorThemeData {
     commandCenterBorder: Color(0xFF383838),
     commandCenterForeground: Color(0xFFCCCCCC),
     accentColor: Color(0xFF0078D4),
+    terminalBackground: Color(0xFF1E1E1E),
+    terminalForeground: Color(0xFFD4D4D4),
+    terminalCursor: Color(0xFFAEAFAD),
+    terminalSelectionBackground: Color(0xFF264F78),
+    terminalAnsiColors: [
+      Color(0xFF000000),
+      Color(0xFFCD3131),
+      Color(0xFF0DBC79),
+      Color(0xFFE5E510),
+      Color(0xFF2472C8),
+      Color(0xFFBC3FBC),
+      Color(0xFF11A8CD),
+      Color(0xFFE5E5E5),
+      Color(0xFF666666),
+      Color(0xFFF14C4C),
+      Color(0xFF23D18B),
+      Color(0xFFF5F543),
+      Color(0xFF3B8EEA),
+      Color(0xFFD670D6),
+      Color(0xFF29B8DB),
+      Color(0xFFFFFFFF),
+    ],
   );
 }
 

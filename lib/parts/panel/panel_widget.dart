@@ -1,5 +1,7 @@
 import 'package:code_editor/core/execution/execution_controller.dart';
 import 'package:code_editor/core/lsp/diagnostics/diagnostics_service.dart';
+import 'package:code_editor/core/terminal/services/terminal_scope.dart';
+import 'package:code_editor/core/terminal/services/terminal_service.dart';
 import 'package:flutter/material.dart';
 import '../../core/theme/editor_theme.dart';
 import '../../layout/controllers/layout_controller.dart';
@@ -7,6 +9,7 @@ import '../../layout/controllers/lsp_and_execution_scope.dart';
 import '../../layout/models/layout_state.dart';
 import 'views/execution_output_view.dart';
 import 'views/problems_view.dart';
+import 'views/terminal/terminal_panel_view.dart';
 
 /// اللوحة السفلية (Panel) وتشمل الطرفية وسجل المخرجات وقائمة الأخطاء
 class PanelWidget extends StatelessWidget {
@@ -19,6 +22,7 @@ class PanelWidget extends StatelessWidget {
     final layoutState = layoutController.state;
     final diagnosticsService = DiagnosticsScope.of(context);
     final executionController = ExecutionScope.of(context);
+    final terminalService = TerminalScope.of(context);
 
     return Container(
       decoration: BoxDecoration(
@@ -100,7 +104,16 @@ class PanelWidget extends StatelessWidget {
                   ),
                 ),
                 // أزرار التحكم باللوحة
-                _buildActionIcon(Icons.add, 'New Terminal', theme, () {}),
+                _buildActionIcon(
+                  Icons.add,
+                  'New Terminal',
+                  theme,
+                  () => _createTerminal(
+                    context,
+                    terminalService,
+                    layoutController,
+                  ),
+                ),
                 _buildActionIcon(
                   layoutState.isPanelMaximized
                       ? Icons.fullscreen_exit_rounded
@@ -128,6 +141,7 @@ class PanelWidget extends StatelessWidget {
               theme,
               diagnosticsService,
               executionController,
+              terminalService,
             ),
           ),
         ],
@@ -201,53 +215,11 @@ class PanelWidget extends StatelessWidget {
     EditorThemeData theme,
     DiagnosticsService diagnosticsService,
     ExecutionController executionController,
+    TerminalService terminalService,
   ) {
     switch (tab) {
       case PanelTab.terminal:
-        return Container(
-          padding: const EdgeInsets.all(12),
-          color: theme.panelBackground,
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'osm@antigravity:~/flutter_projects/code_editor\$ flutter run',
-                  style: TextStyle(
-                    color: theme.editorForeground,
-                    fontFamily: 'monospace',
-                    fontSize: 12.5,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                const Text(
-                  'Launching lib/main.dart on Linux desktop in debug mode...',
-                  style: TextStyle(
-                    color: Colors.grey,
-                    fontFamily: 'monospace',
-                    fontSize: 12,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      'osm@antigravity:~/flutter_projects/code_editor\$ ',
-                      style: TextStyle(
-                        color: theme.editorForeground,
-                        fontFamily: 'monospace',
-                        fontSize: 12.5,
-                      ),
-                    ),
-                    Container(width: 7, height: 14, color: theme.accentColor),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        );
+        return const TerminalPanelView();
       case PanelTab.problems:
         return ProblemsView(diagnosticsService: diagnosticsService);
       case PanelTab.output:
@@ -265,26 +237,43 @@ class PanelWidget extends StatelessWidget {
     }
   }
 
-  Widget _buildActionIcon(
-    IconData icon,
-    String tooltip,
-    EditorThemeData theme,
-    VoidCallback onPressed,
-  ) {
-    return Tooltip(
-      message: tooltip,
-      child: InkWell(
-        onTap: onPressed,
-        borderRadius: BorderRadius.circular(4),
-        child: Padding(
-          padding: const EdgeInsets.all(4.0),
-          child: Icon(
-            icon,
-            size: 14,
-            color: theme.panelForeground.withValues(alpha: 0.7),
-          ),
+  Future<void> _createTerminal(
+    BuildContext context,
+    TerminalService terminalService,
+    WorkbenchLayoutController layoutController,
+  ) async {
+    layoutController.selectPanelTab(PanelTab.terminal);
+    try {
+      await terminalService.createTerminal();
+    } catch (error) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not start terminal: $error')),
+        );
+      }
+    }
+  }
+}
+
+Widget _buildActionIcon(
+  IconData icon,
+  String tooltip,
+  EditorThemeData theme,
+  VoidCallback onPressed,
+) {
+  return Tooltip(
+    message: tooltip,
+    child: InkWell(
+      onTap: onPressed,
+      borderRadius: BorderRadius.circular(4),
+      child: Padding(
+        padding: const EdgeInsets.all(4.0),
+        child: Icon(
+          icon,
+          size: 14,
+          color: theme.panelForeground.withValues(alpha: 0.7),
         ),
       ),
-    );
-  }
+    ),
+  );
 }

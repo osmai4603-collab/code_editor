@@ -1,0 +1,1 @@
+enum StatusBarAlignment { left, right }

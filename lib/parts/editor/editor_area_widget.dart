@@ -257,32 +257,39 @@ class EditorAreaWidget extends StatelessWidget {
   }
 
   Widget _buildEmptyWatermark(EditorThemeData theme) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            Icons.code_rounded,
-            size: 64,
-            color: theme.editorForeground.withValues(alpha: 0.15),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'No Editors Open',
-            style: TextStyle(
-              color: theme.editorForeground.withValues(alpha: 0.4),
-              fontSize: 16,
+    return LayoutBuilder(
+      builder: (context, constraints) => SingleChildScrollView(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minHeight: constraints.maxHeight),
+          child: Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.code_rounded,
+                  size: 64,
+                  color: theme.editorForeground.withValues(alpha: 0.15),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'No Editors Open',
+                  style: TextStyle(
+                    color: theme.editorForeground.withValues(alpha: 0.4),
+                    fontSize: 16,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Select a file from the explorer or press Ctrl+P to open file',
+                  style: TextStyle(
+                    color: theme.editorForeground.withValues(alpha: 0.3),
+                    fontSize: 12,
+                  ),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: 8),
-          Text(
-            'Select a file from the explorer or press Ctrl+P to open file',
-            style: TextStyle(
-              color: theme.editorForeground.withValues(alpha: 0.3),
-              fontSize: 12,
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }

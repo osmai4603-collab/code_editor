@@ -238,7 +238,7 @@ class _ExplorerViewState extends State<ExplorerView> {
             ],
           ),
           if (_workspaceExpanded) ...[
-            ExplorerSearchBar(controller: explorer),
+            // ExplorerSearchBar(controller: explorer),
             Expanded(
               child: root == null
                   ? Center(

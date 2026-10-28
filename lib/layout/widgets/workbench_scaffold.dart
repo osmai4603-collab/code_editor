@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/constants/editor_constants.dart';
 import '../../core/theme/editor_theme.dart';
 import '../../parts/activitybar/activitybar_widget.dart';
 import '../../parts/auxiliarybar/auxiliarybar_widget.dart';
@@ -52,28 +53,47 @@ class WorkbenchScaffold extends StatelessWidget {
 
                   // المنطقة المركزية (Editor Area + Bottom Panel)
                   Expanded(
-                    child: Column(
-                      children: [
-                        // مساحة التحرير (تختفي إذا كانت اللوحة السفلية في وضع التكبير التام Maximize)
-                        if (!state.isPanelMaximized || !state.isPanelVisible)
-                          const Expanded(child: EditorAreaWidget()),
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        final minimumEditorHeight =
+                            EditorConstants.tabHeight +
+                            EditorConstants.breadcrumbsHeight;
+                        final maxPanelHeight =
+                            (constraints.maxHeight -
+                                    EditorConstants.sashThickness -
+                                    minimumEditorHeight)
+                                .clamp(0.0, double.infinity);
+                        final panelHeight = state.panelHeight
+                            .clamp(0.0, maxPanelHeight)
+                            .toDouble();
 
-                        // اللوحة السفلية (Terminal / Problems / Output)
-                        if (state.isPanelVisible && !state.isZenMode) ...[
-                          if (!state.isPanelMaximized)
-                            ResizableSplitter(
-                              orientation: SplitterOrientation.vertical,
-                              onDragDelta: layoutController.resizePanel,
-                              onDoubleTap: layoutController.togglePanelMaximized,
-                            ),
-                          SizedBox(
-                            height: state.isPanelMaximized ? null : state.panelHeight,
-                            child: state.isPanelMaximized
-                                ? const Expanded(child: PanelWidget())
-                                : const PanelWidget(),
-                          ),
-                        ],
-                      ],
+                        return Column(
+                          children: [
+                            // مساحة التحرير (تختفي إذا كانت اللوحة السفلية في وضع التكبير التام Maximize)
+                            if (!state.isPanelMaximized ||
+                                !state.isPanelVisible)
+                              const Expanded(child: EditorAreaWidget()),
+
+                            // اللوحة السفلية (Terminal / Problems / Output)
+                            if (state.isPanelVisible && !state.isZenMode) ...[
+                              if (state.isPanelMaximized)
+                                const Expanded(child: PanelWidget())
+                              else ...[
+                                ResizableSplitter(
+                                  orientation: SplitterOrientation.vertical,
+                                  onDragDelta: layoutController.resizePanel,
+                                  onDoubleTap:
+                                      layoutController.togglePanelMaximized,
+                                ),
+                                SizedBox(
+                                  height: panelHeight,
+                                  child: const PanelWidget(),
+                                ),
+                              ],
+                            ],
+                          ],
+                        );
+                      },
                     ),
                   ),
 

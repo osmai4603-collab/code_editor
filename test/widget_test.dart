@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:code_editor/main.dart';
 import 'package:code_editor/layout/widgets/workbench_scaffold.dart';
+import 'package:code_editor/layout/controllers/layout_controller.dart';
 import 'package:code_editor/parts/titlebar/titlebar_widget.dart';
 import 'package:code_editor/parts/activitybar/activitybar_widget.dart';
 import 'package:code_editor/parts/sidebar/sidebar_widget.dart';
@@ -36,5 +37,36 @@ void main() {
     expect(find.text('No Editors Open'), findsOneWidget);
     expect(find.text('main.dart'), findsNothing);
     expect(find.text('editor_theme.dart'), findsNothing);
+  });
+
+  testWidgets('Empty editor state fits a short window without overflow', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(1280, 400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+
+    await tester.pumpWidget(const CodeEditorApp(autoStartLsp: false));
+    await tester.pumpAndSettle();
+
+    expect(find.text('No Editors Open'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Bottom panel shrinks to fit a short workbench', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(1280, 600);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+
+    await tester.pumpWidget(const CodeEditorApp(autoStartLsp: false));
+    await tester.pumpAndSettle();
+
+    final context = tester.element(find.byType(WorkbenchScaffold));
+    WorkbenchLayoutScope.of(context).resizePanel(-500);
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
   });
 }

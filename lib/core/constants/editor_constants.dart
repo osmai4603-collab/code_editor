@@ -3,6 +3,7 @@ class EditorConstants {
   // شريط الأنشطة
   static const double activityBarWidth = 48.0;
   static const double activityBarIconSize = 22.0;
+ 
 
   // شريط العنوان
   static const double titleBarHeight = 35.0;
