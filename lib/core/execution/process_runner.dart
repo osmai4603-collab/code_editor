@@ -31,27 +31,24 @@ class ProcessRunner {
       );
       _activeProcess = process;
 
-      // الاستماع لـ stdout
-      final stdoutSub = process.stdout
+      final stdoutDone = process.stdout
           .transform(utf8.decoder)
           .transform(const LineSplitter())
-          .listen((line) {
+          .forEach((line) {
         session.addLine(line, OutputLineType.stdout);
         onOutput?.call();
       });
 
-      // الاستماع لـ stderr
-      final stderrSub = process.stderr
+      final stderrDone = process.stderr
           .transform(utf8.decoder)
           .transform(const LineSplitter())
-          .listen((line) {
+          .forEach((line) {
         session.addLine(line, OutputLineType.stderr);
         onOutput?.call();
       });
 
       final exitCode = await process.exitCode;
-      await stdoutSub.cancel();
-      await stderrSub.cancel();
+      await Future.wait([stdoutDone, stderrDone]);
 
       session.finish(exitCode, terminated: _isTerminated);
       onOutput?.call();

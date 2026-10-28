@@ -57,6 +57,30 @@ class TokenColorPalette {
     return TokenColorPalette(colors);
   }
 
+  factory TokenColorPalette.light() {
+    final colors = List<Color>.filled(32, const Color(0xFF3B3B3B));
+    colors[StandardColorId.none] = const Color(0xFF3B3B3B);
+    colors[StandardColorId.defaultForeground] = const Color(0xFF3B3B3B);
+    colors[StandardColorId.keyword] = const Color(0xFF0000FF);
+    colors[StandardColorId.controlKeyword] = const Color(0xFFAF00DB);
+    colors[StandardColorId.stringLiteral] = const Color(0xFFA31515);
+    colors[StandardColorId.comment] = const Color(0xFF008000);
+    colors[StandardColorId.number] = const Color(0xFF098658);
+    colors[StandardColorId.type] = const Color(0xFF267F99);
+    colors[StandardColorId.function] = const Color(0xFF795E26);
+    colors[StandardColorId.variable] = const Color(0xFF001080);
+    colors[StandardColorId.constant] = const Color(0xFF0070C1);
+    colors[StandardColorId.operator] = const Color(0xFF3B3B3B);
+    colors[StandardColorId.regex] = const Color(0xFF811F3F);
+    colors[StandardColorId.escapeCharacter] = const Color(0xFFEE0000);
+    colors[StandardColorId.preprocessor] = const Color(0xFF808080);
+    colors[StandardColorId.bracketLevel1] = const Color(0xFF0431FA);
+    colors[StandardColorId.bracketLevel2] = const Color(0xFF319331);
+    colors[StandardColorId.bracketLevel3] = const Color(0xFF7B3814);
+
+    return TokenColorPalette(colors);
+  }
+
   /// استرجاع اللون بواسطة معرّفه
   Color getColor(int colorId) {
     if (colorId <= 0 || colorId >= _colors.length) {

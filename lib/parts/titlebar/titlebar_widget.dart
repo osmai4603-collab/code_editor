@@ -1,5 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import '../../core/constants/editor_constants.dart';
+import '../../core/theme/app_theme.dart';
+import '../../core/theme/app_theme_data.dart';
 import '../../core/theme/editor_theme.dart';
 import '../../layout/controllers/editor_controller.dart';
 import '../../layout/controllers/layout_controller.dart';
@@ -11,6 +15,7 @@ class TitleBarWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = EditorTheme.of(context);
+    final appTheme = AppTheme.maybeOf(context);
     final layoutController = WorkbenchLayoutScope.of(context);
     final layoutState = layoutController.state;
     final editorController = EditorDocumentsScope.of(context);
@@ -131,6 +136,69 @@ class TitleBarWidget extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  Widget _buildThemePicker(BuildContext context, AppTheme appTheme) {
+    return PopupMenuButton<AppThemeData>(
+      tooltip: 'Color Theme: ${appTheme.theme.label}',
+      initialValue: appTheme.theme,
+      onSelected: (theme) => _changeTheme(context, appTheme, theme),
+      itemBuilder: (context) => [
+        for (final theme in AppThemeData.all)
+          PopupMenuItem<AppThemeData>(
+            value: theme,
+            child: Row(
+              children: [
+                Icon(
+                  theme.id == appTheme.theme.id
+                      ? Icons.radio_button_checked
+                      : Icons.radio_button_unchecked,
+                  size: 16,
+                ),
+                const SizedBox(width: 8),
+                Text(theme.label),
+              ],
+            ),
+          ),
+      ],
+      child: Padding(
+        padding: const EdgeInsets.all(6),
+        child: Icon(
+          Icons.color_lens_outlined,
+          size: 17,
+          color: theme.titleBarForeground,
+        ),
+      ),
+    );
+  }
+
+  void _changeTheme(
+    BuildContext context,
+    AppTheme appTheme,
+    AppThemeData theme,
+  ) {
+    unawaited(() async {
+      try {
+        await appTheme.onThemeChanged(theme);
+      } catch (error, stackTrace) {
+        if (!context.mounted) return;
+        final messenger = ScaffoldMessenger.maybeOf(context);
+        if (messenger == null) {
+          FlutterError.reportError(
+            FlutterErrorDetails(
+              exception: error,
+              stack: stackTrace,
+              library: 'theme selection',
+              context: ErrorDescription('while saving the selected theme'),
+            ),
+          );
+          return;
+        }
+        messenger.showSnackBar(
+          SnackBar(content: Text('Unable to save color theme: $error')),
+        );
+      }
+    }());
   }
 
   Widget _buildMenuButton(String title, EditorThemeData theme) {

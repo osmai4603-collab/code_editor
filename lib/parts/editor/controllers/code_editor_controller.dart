@@ -18,7 +18,8 @@ import '../../../core/theme/editor_theme.dart';
 /// محكم تحرير الكود المخصص عالي الأداء مع التلوين النحوي والدلالي
 class CodeEditorController extends TextEditingController {
   final String filePath;
-  final EditorTokenTheme theme;
+  EditorTokenTheme _theme;
+  EditorTokenTheme get theme => _theme;
   final LanguageRegistry _languageRegistry = LanguageRegistry();
   final EditorHighlightService _highlightService = EditorHighlightService();
   late RuleBasedLexer _lexer;
@@ -40,10 +41,16 @@ class CodeEditorController extends TextEditingController {
     required this.filePath,
     EditorTokenTheme? theme,
     DiagnosticsService? diagnosticsService,
-  }) : theme = theme ?? EditorTokenTheme.dark() {
+  }) : _theme = theme ?? EditorTokenTheme.dark() {
     _diagnosticsService = diagnosticsService;
     _lexer = _languageRegistry.getLexerForFile(filePath);
     _diagnosticsService?.addListener(_onDiagnosticsChanged);
+  }
+
+  void updateTheme(EditorTokenTheme theme) {
+    if (identical(_theme, theme)) return;
+    _theme = theme;
+    notifyListeners();
   }
 
   void _onDiagnosticsChanged() => notifyListeners();

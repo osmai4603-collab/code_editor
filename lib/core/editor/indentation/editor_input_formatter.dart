@@ -214,11 +214,7 @@ class EditorInputFormatter extends TextInputFormatter {
   bool _isStructuralClosingPair(String character) =>
       const {')', ']', '}'}.contains(character);
 
-  bool _hasMatchingOpeningBracket(
-    String text,
-    int cursor,
-    String closing,
-  ) {
+  bool _hasMatchingOpeningBracket(String text, int cursor, String closing) {
     final opening = switch (closing) {
       ')' => '(',
       ']' => '[',

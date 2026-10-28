@@ -33,6 +33,19 @@ class EditorTokenTheme {
     );
   }
 
+  factory EditorTokenTheme.light({
+    String fontFamily = 'JetBrains Mono',
+    double fontSize = 13.5,
+    double lineHeight = 1.48,
+  }) {
+    return EditorTokenTheme(
+      palette: TokenColorPalette.light(),
+      fontFamily: fontFamily,
+      fontSize: fontSize,
+      lineHeight: lineHeight,
+    );
+  }
+
   /// الحصول على كائن `TextStyle` مطابق لمعرف اللون وقناع نمط الخط
   TextStyle getStyle(int colorId, int fontStyle) {
     final key = (colorId << 4) | (fontStyle & 0x0F);

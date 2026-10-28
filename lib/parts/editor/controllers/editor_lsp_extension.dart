@@ -64,6 +64,11 @@ class EditorLspExtension extends ChangeNotifier {
       _activeClient?.serverCapabilities?.hasDocumentFormatting == true;
   bool get canFormatRange =>
       _activeClient?.serverCapabilities?.hasDocumentRangeFormatting == true;
+  bool get canFormatOnType =>
+      _activeClient?.serverCapabilities?.hasDocumentOnTypeFormatting == true;
+  List<String> get formatOnTypeTriggers =>
+      _activeClient?.serverCapabilities?.documentOnTypeFormattingTriggers ??
+      const [];
 
   /// مزامنة التبويب النشط في المحرر
   Future<void> syncActiveTab(
@@ -270,13 +275,13 @@ class EditorLspExtension extends ChangeNotifier {
         ? capabilities?.hasDocumentFormatting == true
         : capabilities?.hasDocumentRangeFormatting == true;
     if (!supported) {
-      throw StateError('The language server does not support this formatting action');
+      throw StateError(
+        'The language server does not support this formatting action',
+      );
     }
 
     final uri = _uriForPath(tab.path);
     _debouncer.flush(uri);
-    final contentVersion = _contentVersion;
-    final documentText = _documentText;
     final params = <String, dynamic>{
       'textDocument': {'uri': uri},
       'options': {
@@ -286,6 +291,57 @@ class EditorLspExtension extends ChangeNotifier {
     };
     if (range != null) params['range'] = range.toJson();
 
+    return _requestFormattingEdits(client, tab, method, params);
+  }
+
+  Future<List<TextEdit>> formatOnType({
+    required EditorIndentationOptions options,
+    required LspPosition position,
+    required String character,
+  }) async {
+    final client = _activeClient;
+    final tab = _currentTab;
+    if (_disposed || client == null || tab == null) {
+      throw StateError('No language server is available for this document');
+    }
+
+    final capabilities = client.serverCapabilities;
+    if (capabilities == null ||
+        !capabilities.hasDocumentOnTypeFormatting ||
+        !capabilities.documentOnTypeFormattingTriggers.contains(character)) {
+      throw StateError(
+        'The language server does not support this format trigger',
+      );
+    }
+
+    final uri = _uriForPath(tab.path);
+    _debouncer.flush(uri);
+    final params = <String, dynamic>{
+      'textDocument': {'uri': uri},
+      'position': position.toJson(),
+      'ch': character,
+      'options': {
+        'tabSize': options.tabSize,
+        'insertSpaces': options.insertSpaces,
+      },
+    };
+
+    return _requestFormattingEdits(
+      client,
+      tab,
+      'textDocument/onTypeFormatting',
+      params,
+    );
+  }
+
+  Future<List<TextEdit>> _requestFormattingEdits(
+    LspClient client,
+    EditorTabItem tab,
+    String method,
+    Map<String, dynamic> params,
+  ) async {
+    final contentVersion = _contentVersion;
+    final documentText = _documentText;
     final response = await client.sendRequest(
       method,
       params,
@@ -295,26 +351,34 @@ class EditorLspExtension extends ChangeNotifier {
         _currentTab?.id != tab.id ||
         _contentVersion != contentVersion ||
         _documentText != documentText) {
-      throw StateError('The document changed while formatting was in progress');
+      throw FormattingRequestOutdatedException();
     }
+
     if (response.isError) {
       throw StateError(
-        response.error?.message ?? 'The language server formatting request failed',
+        response.error?.message ??
+            'The language server formatting request failed',
       );
     }
     if (response.result == null) return const [];
     if (response.result is! List) {
-      throw FormatException('The language server returned invalid formatting edits');
+      throw FormatException(
+        'The language server returned invalid formatting edits',
+      );
     }
 
-    return (response.result as List).map((edit) {
-      if (edit is! Map<String, dynamic> ||
-          edit['range'] is! Map<String, dynamic> ||
-          edit['newText'] is! String) {
-        throw FormatException('The language server returned an invalid text edit');
-      }
-      return TextEdit.fromJson(edit);
-    }).toList(growable: false);
+    return (response.result as List)
+        .map((edit) {
+          if (edit is! Map<String, dynamic> ||
+              edit['range'] is! Map<String, dynamic> ||
+              edit['newText'] is! String) {
+            throw FormatException(
+              'The language server returned an invalid text edit',
+            );
+          }
+          return TextEdit.fromJson(edit);
+        })
+        .toList(growable: false);
   }
 
   /// طلب الإكمال التلقائي عند موضع المؤشر
@@ -475,4 +539,9 @@ class EditorLspExtension extends ChangeNotifier {
     _debouncer.dispose();
     super.dispose();
   }
+}
+
+class FormattingRequestOutdatedException extends StateError {
+  FormattingRequestOutdatedException()
+    : super('The document changed while formatting was in progress');
 }

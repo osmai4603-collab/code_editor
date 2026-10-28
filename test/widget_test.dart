@@ -11,6 +11,7 @@ import 'package:code_editor/parts/panel/panel_widget.dart';
 import 'package:code_editor/parts/statusbar/statusbar_widget.dart';
 import 'package:code_editor/parts/sidebar/explorer/explorer_view.dart';
 import 'package:code_editor/core/statusbar/status_bar_preferences_store.dart';
+import 'package:code_editor/core/editor/formatting/editor_formatting_preferences.dart';
 
 void main() {
   testWidgets('CodeEditor Workbench Scaffold smoke test', (
@@ -25,6 +26,7 @@ void main() {
       CodeEditorApp(
         autoStartLsp: false,
         statusBarPreferencesStore: InMemoryStatusBarPreferencesStore(),
+        formattingPreferencesStore: InMemoryEditorFormattingPreferencesStore(),
       ),
     );
     await tester.pumpAndSettle();
@@ -56,6 +58,7 @@ void main() {
       CodeEditorApp(
         autoStartLsp: false,
         statusBarPreferencesStore: InMemoryStatusBarPreferencesStore(),
+        formattingPreferencesStore: InMemoryEditorFormattingPreferencesStore(),
       ),
     );
     await tester.pumpAndSettle();
@@ -75,6 +78,7 @@ void main() {
       CodeEditorApp(
         autoStartLsp: false,
         statusBarPreferencesStore: InMemoryStatusBarPreferencesStore(),
+        formattingPreferencesStore: InMemoryEditorFormattingPreferencesStore(),
       ),
     );
     await tester.pumpAndSettle();

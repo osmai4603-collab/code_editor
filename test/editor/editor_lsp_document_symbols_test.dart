@@ -22,6 +22,7 @@ void main() {
     Future<void> initializeClient({
       required bool supportsSymbols,
       bool supportsFormatting = false,
+      bool supportsOnTypeFormatting = false,
     }) async {
       channel = _MockLspChannel();
       client = LspClient(channel: channel);
@@ -34,6 +35,11 @@ void main() {
           'capabilities': {
             if (supportsSymbols) 'documentSymbolProvider': true,
             if (supportsFormatting) 'documentFormattingProvider': true,
+            if (supportsOnTypeFormatting)
+              'documentOnTypeFormattingProvider': {
+                'firstTriggerCharacter': '}',
+                'moreTriggerCharacter': [':'],
+              },
           },
         },
       );
@@ -156,6 +162,35 @@ void main() {
         expect(formatting, throwsStateError);
       },
     );
+
+    test('requests on-type formatting with trigger and position', () async {
+      await initializeClient(
+        supportsSymbols: false,
+        supportsOnTypeFormatting: true,
+      );
+      await extension!.syncActiveTab(_tab);
+
+      final formatting = extension!.formatOnType(
+        options: const EditorIndentationOptions(tabSize: 2, indentSize: 2),
+        position: const LspPosition(line: 3, character: 5),
+        character: '}',
+      );
+      await pumpEventQueue();
+
+      final request = _requests(
+        channel,
+        'textDocument/onTypeFormatting',
+      ).single;
+      expect(request['params']['position'], {'line': 3, 'character': 5});
+      expect(request['params']['ch'], '}');
+      expect(request['params']['options'], {
+        'tabSize': 2,
+        'insertSpaces': true,
+      });
+      channel.respond(request['id'], result: []);
+
+      expect(await formatting, isEmpty);
+    });
   });
 }
 

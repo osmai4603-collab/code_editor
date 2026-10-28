@@ -1,8 +1,12 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:code_editor/parts/editor/scrollbar/editor_scrollbar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../core/editor/formatting/editor_formatting_preferences.dart';
+import '../../core/editor/formatting/editor_formatting_preferences_scope.dart';
+import '../../core/editor/formatting/editor_text_change.dart';
 import '../../core/editor/formatting/text_edit_applier.dart';
 import '../../core/editor/indentation/editor_indentation_options.dart';
 import '../../core/editor/indentation/editor_input_formatter.dart';
@@ -16,6 +20,7 @@ import '../../core/constants/editor_constants.dart';
 import '../../core/lsp/protocol/lsp_types.dart';
 import '../../core/statusbar/editor_status_controller.dart';
 import '../../core/statusbar/status_bar_scope.dart';
+import '../../core/theme/app_theme.dart';
 import '../../core/theme/editor_theme.dart';
 import '../../layout/controllers/editor_controller.dart';
 import '../../layout/controllers/layout_controller.dart';
@@ -336,10 +341,14 @@ class _CodeEditorSurfaceState extends State<_CodeEditorSurface> {
   bool _isSynchronizingScroll = false;
   bool _scrollMetricsRefreshScheduled = false;
   bool _awaitingFormatSelectionChord = false;
+  bool _pastePending = false;
+  Timer? _pastePendingTimer;
+  late String _lastUserInputText;
   int? _lastNavigationRequestId;
   EditorLspExtension? _lspExtension;
   bool _isExtensionInitialized = false;
   EditorStatusController? _editorStatusController;
+  late EditorFormattingPreferencesController _formattingPreferencesController;
 
   @override
   void initState() {
@@ -352,6 +361,7 @@ class _CodeEditorSurfaceState extends State<_CodeEditorSurface> {
         widget.tabItem.indentationOptions ??
         _indentationService.detect(widget.tabItem.content);
     _indentationSourceText = _textController.text;
+    _lastUserInputText = _textController.text;
     _indentationSourceTabSize = _indentationOptions.tabSize;
     _indentationColumns = _buildIndentationColumns(
       _indentationSourceText,
@@ -404,8 +414,12 @@ class _CodeEditorSurfaceState extends State<_CodeEditorSurface> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    _textController.updateTheme(AppTheme.of(context).tokenTheme);
     _applyNavigationRequest();
     _editorStatusController = EditorStatusScope.of(context);
+    _formattingPreferencesController = EditorFormattingPreferencesScope.of(
+      context,
+    );
     _updateEditorStatus();
     final diagnostics = DiagnosticsScope.of(context);
     _textController.diagnosticsService = diagnostics;
@@ -593,6 +607,16 @@ class _CodeEditorSurfaceState extends State<_CodeEditorSurface> {
   KeyEventResult _handleEditorKey(FocusNode node, KeyEvent event) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
     final keyboard = HardwareKeyboard.instance;
+    if (event.logicalKey == LogicalKeyboardKey.keyS &&
+        (keyboard.isControlPressed || keyboard.isMetaPressed)) {
+      unawaited(_saveCurrentDocument());
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.keyV &&
+        (keyboard.isControlPressed || keyboard.isMetaPressed)) {
+      _markPastePending();
+      return KeyEventResult.ignored;
+    }
     if (_awaitingFormatSelectionChord) {
       _awaitingFormatSelectionChord = false;
       if (event.logicalKey == LogicalKeyboardKey.keyF &&
@@ -684,6 +708,7 @@ class _CodeEditorSurfaceState extends State<_CodeEditorSurface> {
           isDirectional: selection.isDirectional,
         ),
       );
+      _syncLastUserInputText();
       return;
     }
 
@@ -714,6 +739,7 @@ class _CodeEditorSurfaceState extends State<_CodeEditorSurface> {
           isDirectional: selection.isDirectional,
         ),
       );
+      _syncLastUserInputText();
       return;
     }
     final updated = text.replaceRange(selection.start, selection.end, unit);
@@ -721,9 +747,13 @@ class _CodeEditorSurfaceState extends State<_CodeEditorSurface> {
       text: updated,
       selection: TextSelection.collapsed(offset: selection.start + unit.length),
     );
+    _syncLastUserInputText();
   }
 
-  Future<void> _formatDocument({bool selectionOnly = false}) async {
+  Future<void> _formatDocument({
+    bool selectionOnly = false,
+    LspRange? requestedRange,
+  }) async {
     final extension = _lspExtension;
     if (extension == null) {
       _showEditorMessage('No language server is available for this document');
@@ -731,12 +761,17 @@ class _CodeEditorSurfaceState extends State<_CodeEditorSurface> {
     }
     try {
       final selection = _textController.selection;
-      final range = selectionOnly && selection.isValid && !selection.isCollapsed
-          ? LspRange(
-              start: _positionAtOffset(_textController.text, selection.start),
-              end: _positionAtOffset(_textController.text, selection.end),
-            )
-          : null;
+      final range =
+          requestedRange ??
+          (selectionOnly && selection.isValid && !selection.isCollapsed
+              ? LspRange(
+                  start: _positionAtOffset(
+                    _textController.text,
+                    selection.start,
+                  ),
+                  end: _positionAtOffset(_textController.text, selection.end),
+                )
+              : null);
       if (selectionOnly && range == null) {
         _showEditorMessage('Select a range to format');
         return;
@@ -752,8 +787,114 @@ class _CodeEditorSurfaceState extends State<_CodeEditorSurface> {
           edits,
         );
       }
+      _lastUserInputText = _textController.text;
     } catch (error) {
       _showEditorMessage('Formatting failed: $error');
+    }
+  }
+
+  Future<void> _formatOnType(String character, int offset) async {
+    final extension = _lspExtension;
+    if (extension == null) return;
+    try {
+      final edits = await extension.formatOnType(
+        options: _indentationOptions,
+        position: _positionAtOffset(_textController.text, offset),
+        character: character,
+      );
+      if (!mounted ||
+          !_formattingPreferencesController.preferences.formatOnType) {
+        return;
+      }
+      if (edits.isNotEmpty) {
+        _textController.value = _textEditApplier.apply(
+          _textController.value,
+          edits,
+        );
+      }
+      _lastUserInputText = _textController.text;
+    } on FormattingRequestOutdatedException {
+      return;
+    } catch (error) {
+      _showEditorMessage('Automatic formatting failed: $error');
+    }
+  }
+
+  void _handleTextFieldChanged(String value) {
+    final change = EditorTextChange.between(_lastUserInputText, value);
+    _lastUserInputText = value;
+    if (change == null) return;
+
+    if (_pastePending) {
+      _pastePending = false;
+      _pastePendingTimer?.cancel();
+      if (_formattingPreferencesController.preferences.formatOnPaste &&
+          _lspExtension?.canFormatRange == true &&
+          change.insertedText.isNotEmpty) {
+        unawaited(
+          _formatDocument(
+            requestedRange: LspRange(
+              start: _positionAtOffset(value, change.start),
+              end: _positionAtOffset(
+                value,
+                change.start + change.insertedText.length,
+              ),
+            ),
+          ),
+        );
+      }
+      return;
+    }
+
+    final extension = _lspExtension;
+    final insertedText = change.insertedText;
+    if (change.removedLength == 0 &&
+        insertedText.length == 1 &&
+        _formattingPreferencesController.preferences.formatOnType &&
+        extension?.formatOnTypeTriggers.contains(insertedText) == true) {
+      unawaited(
+        _formatOnType(insertedText, change.start + insertedText.length),
+      );
+    }
+  }
+
+  void _markPastePending() {
+    _pastePending = true;
+    _pastePendingTimer?.cancel();
+    _pastePendingTimer = Timer(const Duration(seconds: 1), () {
+      _pastePending = false;
+    });
+  }
+
+  Widget _buildTextFieldContextMenu(
+    BuildContext context,
+    EditableTextState editableTextState,
+  ) {
+    final buttonItems = editableTextState.contextMenuButtonItems.map((item) {
+      if (item.type != ContextMenuButtonType.paste) return item;
+      return ContextMenuButtonItem(
+        type: item.type,
+        onPressed: () {
+          _markPastePending();
+          item.onPressed?.call();
+        },
+      );
+    }).toList();
+    return AdaptiveTextSelectionToolbar.buttonItems(
+      anchors: editableTextState.contextMenuAnchors,
+      buttonItems: buttonItems,
+    );
+  }
+
+  Future<void> _saveCurrentDocument() async {
+    if (_formattingPreferencesController.preferences.formatOnSave) {
+      await _formatDocument();
+    }
+    if (!mounted) return;
+    try {
+      await EditorDocumentsScope.of(context).saveTab(widget.tabItem.id);
+    } catch (error) {
+      _showEditorMessage('Unable to save file: $error');
     }
   }
 
@@ -801,6 +942,7 @@ class _CodeEditorSurfaceState extends State<_CodeEditorSurface> {
         isDirectional: current.selection.isDirectional,
       ),
     );
+    _syncLastUserInputText();
     final options = _indentationOptions.copyWith(
       indentSize: size,
       insertSpaces: toSpaces,
@@ -819,9 +961,31 @@ class _CodeEditorSurfaceState extends State<_CodeEditorSurface> {
       ..showSnackBar(SnackBar(content: Text(message)));
   }
 
+  Future<void> _toggleFormattingPreference(String preference) async {
+    final current = _formattingPreferencesController.preferences;
+    final next = switch (preference) {
+      'formatOnSave' => current.copyWith(formatOnSave: !current.formatOnSave),
+      'formatOnType' => current.copyWith(formatOnType: !current.formatOnType),
+      'formatOnPaste' => current.copyWith(
+        formatOnPaste: !current.formatOnPaste,
+      ),
+      _ => current,
+    };
+    try {
+      await _formattingPreferencesController.update(next);
+    } catch (error) {
+      _showEditorMessage('Unable to save formatting preferences: $error');
+    }
+  }
+
+  void _syncLastUserInputText() {
+    _lastUserInputText = _textController.text;
+  }
+
   @override
   void dispose() {
     _editorStatusController?.clearForTab(widget.tabItem.id);
+    _pastePendingTimer?.cancel();
     _textController.removeListener(_onTextChanged);
     _lspExtension?.removeListener(_updateActiveSymbolPath);
     _textController.dispose();
@@ -852,6 +1016,7 @@ class _CodeEditorSurfaceState extends State<_CodeEditorSurface> {
     } else {
       _textController.text = text + insert;
     }
+    _syncLastUserInputText();
 
     _lspExtension?.hideCompletions();
   }
@@ -931,6 +1096,12 @@ class _CodeEditorSurfaceState extends State<_CodeEditorSurface> {
                       _formatDocument();
                     case 'formatSelection':
                       _formatDocument(selectionOnly: true);
+                    case 'formatOnSave':
+                      unawaited(_toggleFormattingPreference('formatOnSave'));
+                    case 'formatOnType':
+                      unawaited(_toggleFormattingPreference('formatOnType'));
+                    case 'formatOnPaste':
+                      unawaited(_toggleFormattingPreference('formatOnPaste'));
                     case 'spaces':
                       _convertIndentation(toSpaces: true);
                     case 'tabs':
@@ -957,6 +1128,37 @@ class _CodeEditorSurfaceState extends State<_CodeEditorSurface> {
                     value: 'formatSelection',
                     child: Text('Format Selection'),
                     enabled: _lspExtension?.canFormatRange == true,
+                  ),
+                  const PopupMenuDivider(),
+                  PopupMenuItem<String>(
+                    value: 'formatOnSave',
+                    enabled: _lspExtension?.canFormatDocument == true,
+                    child: _FormattingPreferenceMenuItem(
+                      checked: _formattingPreferencesController
+                          .preferences
+                          .formatOnSave,
+                      label: 'Format on Save',
+                    ),
+                  ),
+                  PopupMenuItem<String>(
+                    value: 'formatOnType',
+                    enabled: _lspExtension?.canFormatOnType == true,
+                    child: _FormattingPreferenceMenuItem(
+                      checked: _formattingPreferencesController
+                          .preferences
+                          .formatOnType,
+                      label: 'Format on Type',
+                    ),
+                  ),
+                  PopupMenuItem<String>(
+                    value: 'formatOnPaste',
+                    enabled: _lspExtension?.canFormatRange == true,
+                    child: _FormattingPreferenceMenuItem(
+                      checked: _formattingPreferencesController
+                          .preferences
+                          .formatOnPaste,
+                      label: 'Format on Paste',
+                    ),
                   ),
                   const PopupMenuDivider(),
                   PopupMenuItem(
@@ -1208,6 +1410,10 @@ class _CodeEditorSurfaceState extends State<_CodeEditorSurface> {
                                                             TextInputType
                                                                 .multiline,
                                                         style: textStyle,
+                                                        onChanged:
+                                                            _handleTextFieldChanged,
+                                                        contextMenuBuilder:
+                                                            _buildTextFieldContextMenu,
                                                         decoration:
                                                             const InputDecoration(
                                                               border:

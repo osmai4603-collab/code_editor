@@ -88,6 +88,10 @@ void main() {
                 'hoverProvider': true,
                 'documentFormattingProvider': true,
                 'documentRangeFormattingProvider': true,
+                'documentOnTypeFormattingProvider': {
+                  'firstTriggerCharacter': '}',
+                  'moreTriggerCharacter': [':', ']'],
+                },
               },
             },
           }),
@@ -98,6 +102,8 @@ void main() {
         expect(caps.hasHover, isTrue);
         expect(caps.hasDocumentFormatting, isTrue);
         expect(caps.hasDocumentRangeFormatting, isTrue);
+        expect(caps.hasDocumentOnTypeFormatting, isTrue);
+        expect(caps.documentOnTypeFormattingTriggers, ['}', ':', ']']);
         expect(caps.textDocumentSync, equals(TextDocumentSyncKind.full));
         expect(client.isInitialized, isTrue);
 

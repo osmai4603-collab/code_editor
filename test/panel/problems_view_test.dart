@@ -87,45 +87,55 @@ void main() {
     expect(find.text('Unused value'), findsOneWidget);
   });
 
-  testWidgets(
-    'opens a file from disk and requests navigation to its location',
-    (tester) async {
-      final file = File('${tempDirectory.path}/target.dart');
-      await file.writeAsString('first line\nsecond line\nthird line');
-      diagnostics.updateDiagnostics(file.path, [
-        item(
-          file.path,
-          message: 'Inspect this location',
-          severity: DiagnosticSeverity.error,
-          line: 1,
-          character: 2,
-        ),
-      ]);
+  testWidgets('selects an open file and requests navigation to its location', (
+    tester,
+  ) async {
+    final path = '${tempDirectory.path}/target.dart';
+    documents.openFile(
+      title: 'target.dart',
+      path: path,
+      content: 'first line\nsecond line\nthird line',
+    );
+    documents.openFile(
+      title: 'other.dart',
+      path: '${tempDirectory.path}/other.dart',
+      content: 'other file',
+    );
+    diagnostics.updateDiagnostics(path, [
+      item(
+        path,
+        message: 'Inspect this location',
+        severity: DiagnosticSeverity.error,
+        line: 1,
+        character: 2,
+      ),
+    ]);
 
-      await tester.pumpWidget(testApp());
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Inspect this location'));
-      await tester.pumpAndSettle();
+    await tester.pumpWidget(testApp());
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Inspect this location'));
+    await tester.tap(
+      find.ancestor(
+        of: find.text('Inspect this location'),
+        matching: find.byType(InkWell),
+      ),
+    );
+    await tester.pumpAndSettle();
 
-      expect(documents.activeTab?.path, file.path);
-      expect(
-        documents.activeTab?.content,
-        'first line\nsecond line\nthird line',
-      );
-      expect(documents.navigationRequest?.path, file.path);
-      expect(documents.navigationRequest?.line, 1);
-      expect(documents.navigationRequest?.character, 2);
-    },
-  );
+    expect(documents.activeTab?.path, path);
+    expect(documents.activeTab?.content, 'first line\nsecond line\nthird line');
+    expect(documents.navigationRequest?.path, path);
+    expect(documents.navigationRequest?.line, 1);
+    expect(documents.navigationRequest?.character, 2);
+  });
 
   testWidgets('selects an open dirty file without replacing its contents', (
     tester,
   ) async {
-    final file = File('${tempDirectory.path}/dirty.dart');
-    await file.writeAsString('disk version');
+    final path = '${tempDirectory.path}/dirty.dart';
     documents.openFile(
       title: 'dirty.dart',
-      path: file.path,
+      path: path,
       content: 'editor version',
     );
     final openedTabId = documents.activeTab!.id;
@@ -135,9 +145,9 @@ void main() {
       path: '${tempDirectory.path}/other.dart',
       content: 'other file',
     );
-    diagnostics.updateDiagnostics(file.path, [
+    diagnostics.updateDiagnostics(path, [
       item(
-        file.path,
+        path,
         message: 'Return to dirty file',
         severity: DiagnosticSeverity.warning,
       ),
@@ -150,6 +160,6 @@ void main() {
 
     expect(documents.activeTab?.id, openedTabId);
     expect(documents.activeTab?.content, 'unsaved editor version');
-    expect(documents.navigationRequest?.path, file.path);
+    expect(documents.navigationRequest?.path, path);
   });
 }

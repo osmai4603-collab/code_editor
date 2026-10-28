@@ -27,6 +27,7 @@ class _PanelWidgetState extends State<PanelWidget> {
     final layoutState = layoutController.state;
     final diagnosticsService = DiagnosticsScope.of(context);
     final executionController = ExecutionScope.of(context);
+    final outputService = OutputScope.of(context);
 
     _panelBodies.putIfAbsent(
       layoutState.activePanelTab,
@@ -34,6 +35,7 @@ class _PanelWidgetState extends State<PanelWidget> {
         layoutState.activePanelTab,
         diagnosticsService,
         executionController,
+        outputService,
       ),
     );
 
@@ -97,21 +99,24 @@ class _PanelWidgetState extends State<PanelWidget> {
             ),
           ),
           Expanded(
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                for (final entry in _panelBodies.entries)
-                  Offstage(
-                    offstage: entry.key != layoutState.activePanelTab,
-                    child: TickerMode(
-                      enabled: entry.key == layoutState.activePanelTab,
-                      child: ExcludeFocus(
-                        excluding: entry.key != layoutState.activePanelTab,
-                        child: entry.value,
+            child: Material(
+              color: theme.panelBackground,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  for (final entry in _panelBodies.entries)
+                    Offstage(
+                      offstage: entry.key != layoutState.activePanelTab,
+                      child: TickerMode(
+                        enabled: entry.key == layoutState.activePanelTab,
+                        child: ExcludeFocus(
+                          excluding: entry.key != layoutState.activePanelTab,
+                          child: entry.value,
+                        ),
                       ),
                     ),
-                  ),
-              ],
+                ],
+              ),
             ),
           ),
         ],
@@ -225,6 +230,7 @@ class _PanelWidgetState extends State<PanelWidget> {
     PanelTab tab,
     DiagnosticsService diagnosticsService,
     ExecutionController executionController,
+    OutputService outputService,
   ) {
     switch (tab) {
       case PanelTab.terminal:
@@ -232,7 +238,7 @@ class _PanelWidgetState extends State<PanelWidget> {
       case PanelTab.problems:
         return ProblemsView(diagnosticsService: diagnosticsService);
       case PanelTab.output:
-        return ExecutionOutputView(executionController: executionController);
+        return ExecutionOutputView(outputService: outputService);
       case PanelTab.debugConsole:
         return const _DebugConsoleUnavailableView();
     }
@@ -247,17 +253,14 @@ class _PanelWidgetState extends State<PanelWidget> {
   }) => Semantics(
     button: true,
     label: tooltip,
-    child: Tooltip(
-      message: tooltip,
-      child: IconButton(
-        onPressed: onPressed,
-        tooltip: tooltip,
-        icon: Icon(icon, size: 16),
-        color: theme.panelForeground.withValues(alpha: 0.75),
-        visualDensity: VisualDensity.compact,
-        constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-        padding: const EdgeInsets.all(6),
-      ),
+    child: IconButton(
+      onPressed: onPressed,
+      tooltip: tooltip,
+      icon: Icon(icon, size: 16),
+      color: theme.panelForeground.withValues(alpha: 0.75),
+      visualDensity: VisualDensity.compact,
+      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+      padding: const EdgeInsets.all(6),
     ),
   );
 }

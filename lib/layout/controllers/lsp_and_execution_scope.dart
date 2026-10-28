@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/execution/execution_controller.dart';
 import '../../core/lsp/diagnostics/diagnostics_service.dart';
+import '../../core/output/output_service.dart';
 import '../../core/lsp/registry/lsp_server_registry.dart';
 
 /// نطاق توفير خدمة التشخيصات المركزية (DiagnosticsScope)
@@ -29,6 +30,20 @@ class ExecutionScope extends InheritedNotifier<ExecutionController> {
   static ExecutionController of(BuildContext context) {
     final scope = context.dependOnInheritedWidgetOfExactType<ExecutionScope>();
     assert(scope != null, 'ExecutionScope not found in context');
+    return scope!.notifier!;
+  }
+}
+
+class OutputScope extends InheritedNotifier<OutputService> {
+  const OutputScope({
+    super.key,
+    required OutputService super.notifier,
+    required super.child,
+  });
+
+  static OutputService of(BuildContext context) {
+    final scope = context.dependOnInheritedWidgetOfExactType<OutputScope>();
+    assert(scope != null, 'OutputScope not found in context');
     return scope!.notifier!;
   }
 }

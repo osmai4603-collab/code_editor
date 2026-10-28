@@ -326,18 +326,15 @@ class _ExecutionOutputViewState extends State<ExecutionOutputView> {
     required Color color,
     required String tooltip,
     required VoidCallback? onPressed,
-  }) => Tooltip(
-    message: tooltip,
-    child: IconButton(
-      onPressed: onPressed,
-      tooltip: tooltip,
-      icon: Icon(icon, size: 17),
-      color: color,
-      disabledColor: themeDisabledColor(color),
-      visualDensity: VisualDensity.compact,
-      constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
-      padding: const EdgeInsets.all(4),
-    ),
+  }) => IconButton(
+    onPressed: onPressed,
+    tooltip: tooltip,
+    icon: Icon(icon, size: 17),
+    color: color,
+    disabledColor: themeDisabledColor(color),
+    visualDensity: VisualDensity.compact,
+    constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
+    padding: const EdgeInsets.all(4),
   );
 
   Widget _emptyState(

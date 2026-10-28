@@ -27,10 +27,13 @@ void main() {
       expect(service.detect('root\n  child', fallback: explicit), explicit);
     });
 
-    test('keeps the configured size when the file has only one indent level', () {
-      const fallback = EditorIndentationOptions(tabSize: 8, indentSize: 2);
-      expect(service.detect('root\n    child', fallback: fallback), fallback);
-    });
+    test(
+      'keeps the configured size when the file has only one indent level',
+      () {
+        const fallback = EditorIndentationOptions(tabSize: 8, indentSize: 2);
+        expect(service.detect('root\n    child', fallback: fallback), fallback);
+      },
+    );
 
     test('prefers tabs when indentation mixes tabs and spaces', () {
       const fallback = EditorIndentationOptions(indentSize: 2);
@@ -158,18 +161,36 @@ void main() {
       expect(closing.text, '{\n}');
     });
 
-    test('typing a command after Enter keeps the indentation already inserted', () {
-      final result = type('if ready:\n  ', 'if ready:\n  run');
+    test('does not outdent for an unmatched closing bracket', () {
+      final closing = type('if ready:\n  ', 'if ready:\n  }');
 
-      expect(result.text, 'if ready:\n  run');
+      expect(closing.text, 'if ready:\n  }');
     });
 
-    test('Enter copies existing indentation without inventing file-start indent', () {
-      final unindented = type('run()', 'run()\n');
-      final indented = type('  run()', '  run()\n');
+    test('does not treat brackets in comments as matching pairs', () {
+      final closing = type('# {\n  ', '# {\n  }', languageId: 'python');
 
-      expect(unindented.text, 'run()\n');
-      expect(indented.text, '  run()\n  ');
+      expect(closing.text, '# {\n  }');
     });
+
+    test(
+      'typing a command after Enter keeps the indentation already inserted',
+      () {
+        final result = type('if ready:\n  ', 'if ready:\n  run');
+
+        expect(result.text, 'if ready:\n  run');
+      },
+    );
+
+    test(
+      'Enter copies existing indentation without inventing file-start indent',
+      () {
+        final unindented = type('run()', 'run()\n');
+        final indented = type('  run()', '  run()\n');
+
+        expect(unindented.text, 'run()\n');
+        expect(indented.text, '  run()\n  ');
+      },
+    );
   });
 }

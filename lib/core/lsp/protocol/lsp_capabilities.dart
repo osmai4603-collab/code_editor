@@ -32,13 +32,8 @@ class LspClientCapabilities {
         },
         'formatting': {'dynamicRegistration': false},
         'rangeFormatting': {'dynamicRegistration': false},
-        'definition': {
-          'dynamicRegistration': false,
-          'linkSupport': true,
-        },
-        'references': {
-          'dynamicRegistration': false,
-        },
+        'definition': {'dynamicRegistration': false, 'linkSupport': true},
+        'references': {'dynamicRegistration': false},
         'publishDiagnostics': {
           'relatedInformation': true,
           'versionSupport': true,
@@ -60,19 +55,12 @@ class LspClientCapabilities {
             },
           },
         },
-        'codeLens': {
-          'dynamicRegistration': false,
-        },
-        'rename': {
-          'dynamicRegistration': false,
-          'prepareSupport': true,
-        },
+        'codeLens': {'dynamicRegistration': false},
+        'rename': {'dynamicRegistration': false, 'prepareSupport': true},
       },
       'workspace': {
         'applyEdit': true,
-        'workspaceEdit': {
-          'documentChanges': true,
-        },
+        'workspaceEdit': {'documentChanges': true},
         'configuration': false,
       },
     };
@@ -93,6 +81,7 @@ class LspServerCapabilities {
   final bool hasDocumentFormatting;
   final bool hasDocumentRangeFormatting;
   final bool hasDocumentOnTypeFormatting;
+  final List<String> documentOnTypeFormattingTriggers;
   final Map<String, dynamic> raw;
 
   const LspServerCapabilities({
@@ -108,6 +97,7 @@ class LspServerCapabilities {
     required this.hasDocumentFormatting,
     required this.hasDocumentRangeFormatting,
     required this.hasDocumentOnTypeFormatting,
+    required this.documentOnTypeFormattingTriggers,
     required this.raw,
   });
 
@@ -126,6 +116,7 @@ class LspServerCapabilities {
         hasDocumentFormatting: false,
         hasDocumentRangeFormatting: false,
         hasDocumentOnTypeFormatting: false,
+        documentOnTypeFormattingTriggers: const [],
         raw: {},
       );
     }
@@ -142,16 +133,37 @@ class LspServerCapabilities {
       }
     }
 
+    final onTypeProvider = json['documentOnTypeFormattingProvider'];
+    final onTypeTriggers = <String>[
+      if (onTypeProvider is Map<String, dynamic> &&
+          onTypeProvider['firstTriggerCharacter'] is String)
+        onTypeProvider['firstTriggerCharacter'] as String,
+      if (onTypeProvider is Map<String, dynamic> &&
+          onTypeProvider['moreTriggerCharacter'] is List)
+        ...(onTypeProvider['moreTriggerCharacter'] as List).whereType<String>(),
+    ];
+
     return LspServerCapabilities(
       textDocumentSync: syncKind,
       hasCompletion: json.containsKey('completionProvider'),
-      hasHover: json.containsKey('hoverProvider') && json['hoverProvider'] != false,
-      hasDefinition: json.containsKey('definitionProvider') && json['definitionProvider'] != false,
-      hasReferences: json.containsKey('referencesProvider') && json['referencesProvider'] != false,
-      hasRename: json.containsKey('renameProvider') && json['renameProvider'] != false,
-      hasCodeAction: json.containsKey('codeActionProvider') && json['codeActionProvider'] != false,
-      hasCodeLens: json.containsKey('codeLensProvider') && json['codeLensProvider'] != false,
-      hasDocumentSymbol: json['documentSymbolProvider'] == true ||
+      hasHover:
+          json.containsKey('hoverProvider') && json['hoverProvider'] != false,
+      hasDefinition:
+          json.containsKey('definitionProvider') &&
+          json['definitionProvider'] != false,
+      hasReferences:
+          json.containsKey('referencesProvider') &&
+          json['referencesProvider'] != false,
+      hasRename:
+          json.containsKey('renameProvider') && json['renameProvider'] != false,
+      hasCodeAction:
+          json.containsKey('codeActionProvider') &&
+          json['codeActionProvider'] != false,
+      hasCodeLens:
+          json.containsKey('codeLensProvider') &&
+          json['codeLensProvider'] != false,
+      hasDocumentSymbol:
+          json['documentSymbolProvider'] == true ||
           json['documentSymbolProvider'] is Map,
       hasDocumentFormatting:
           json['documentFormattingProvider'] == true ||
@@ -159,8 +171,8 @@ class LspServerCapabilities {
       hasDocumentRangeFormatting:
           json['documentRangeFormattingProvider'] == true ||
           json['documentRangeFormattingProvider'] is Map,
-      hasDocumentOnTypeFormatting:
-          json['documentOnTypeFormattingProvider'] is Map,
+      hasDocumentOnTypeFormatting: onTypeTriggers.isNotEmpty,
+      documentOnTypeFormattingTriggers: List.unmodifiable(onTypeTriggers),
       raw: json,
     );
   }
