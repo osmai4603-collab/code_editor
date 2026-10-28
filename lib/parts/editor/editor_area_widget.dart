@@ -608,7 +608,7 @@ class _CodeEditorSurfaceState extends State<_CodeEditorSurface> {
                                               ? Colors.redAccent
                                               : theme.editorLineNumber,
                                           fontSize: 12,
-                                          fontFamily: 'monospace',
+                                          fontFamily: 'JetBrains Mono',
                                           fontWeight: hasError
                                               ? FontWeight.bold
                                               : FontWeight.normal,
@@ -668,7 +668,7 @@ class _CodeEditorSurfaceState extends State<_CodeEditorSurface> {
                                         final textStyle = TextStyle(
                                           color: theme.editorForeground,
                                           fontSize: 13.5,
-                                          fontFamily: 'monospace',
+                                          fontFamily: 'JetBrains Mono',
                                           height: 1.48,
                                         );
                                         final contentWidth = _longestLineWidth(

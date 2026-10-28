@@ -14,10 +14,10 @@ class TerminalConfigService extends ChangeNotifier {
   bool smoothScrolling;
 
   TerminalConfigService({
-    this.fontFamily = 'monospace',
+    this.fontFamily = 'JetBrains Mono',
     this.fontSize = 13,
     this.lineHeight = 1.2,
-    this.letterSpacing = 0,
+    this.letterSpacing = -0.2,
     this.cursorShape = CursorShape.block,
     this.cursorBlinking = true,
     this.scrollbackLines = 1000,

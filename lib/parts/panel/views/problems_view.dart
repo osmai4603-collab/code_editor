@@ -185,7 +185,7 @@ class ProblemsView extends StatelessWidget {
               style: TextStyle(
                 color: theme.panelForeground.withValues(alpha: 0.45),
                 fontSize: 11,
-                fontFamily: 'monospace',
+                fontFamily: 'JetBrains Mono',
               ),
             ),
             if (item.source != null) ...[

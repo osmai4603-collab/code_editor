@@ -15,13 +15,13 @@ class EditorTokenTheme {
 
   EditorTokenTheme({
     required this.palette,
-    this.fontFamily = 'monospace',
+    this.fontFamily = 'JetBrains Mono',
     this.fontSize = 13.5,
     this.lineHeight = 1.48,
   });
 
   factory EditorTokenTheme.dark({
-    String fontFamily = 'monospace',
+    String fontFamily = 'JetBrains Mono',
     double fontSize = 13.5,
     double lineHeight = 1.48,
   }) {

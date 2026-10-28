@@ -186,7 +186,7 @@ class _ExecutionOutputViewState extends State<ExecutionOutputView> {
         line.text,
         style: TextStyle(
           color: textColor,
-          fontFamily: 'monospace',
+          fontFamily: 'JetBrains Mono',
           fontSize: 12,
           fontStyle: fontStyle,
         ),

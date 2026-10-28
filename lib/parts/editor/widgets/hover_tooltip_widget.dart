@@ -49,7 +49,7 @@ class HoverTooltipWidget extends StatelessWidget {
               style: TextStyle(
                 color: theme.editorForeground,
                 fontSize: 12,
-                fontFamily: 'monospace',
+                fontFamily: 'JetBrains Mono',
                 height: 1.4,
               ),
             ),

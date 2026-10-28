@@ -85,7 +85,7 @@ class _CompletionPopupWidgetState extends State<CompletionPopupWidget> {
                                 style: TextStyle(
                                   color: theme.editorForeground,
                                   fontSize: 12.5,
-                                  fontFamily: 'monospace',
+                                  fontFamily: 'JetBrains Mono',
                                   fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
                                 ),
                               ),
@@ -96,7 +96,7 @@ class _CompletionPopupWidgetState extends State<CompletionPopupWidget> {
                                 style: TextStyle(
                                   color: theme.editorForeground.withValues(alpha: 0.45),
                                   fontSize: 11,
-                                  fontFamily: 'monospace',
+                                  fontFamily: 'JetBrains Mono',
                                 ),
                               ),
                           ],
