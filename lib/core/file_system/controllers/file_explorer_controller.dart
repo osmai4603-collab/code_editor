@@ -228,16 +228,16 @@ class FileExplorerController extends ChangeNotifier {
           candidate.startsWith('$path${Platform.pathSeparator}'),
     );
     _multiSelection.removeWhere(isDeleted);
-    if (_selectedPath != null && isDeleted(_selectedPath!))
+    if (_selectedPath != null && isDeleted(_selectedPath!)) {
       _selectedPath = null;
+    }
     await _refreshParents(normalized);
   }
 
   Future<void> rename(String path, String newName) async {
     final result = await _fileService.rename(path, newName);
     final parentPath = _dirname(path);
-    if (_selectedPath == path) _selectedPath = result.path;
-    if (_expandedPaths.remove(path)) _expandedPaths.add(result.path);
+    _remapPaths(path, result.path);
     cancelEdit();
     await refresh(path: parentPath);
   }
@@ -245,7 +245,8 @@ class FileExplorerController extends ChangeNotifier {
   Future<void> move(List<String> sourcePaths, String targetDir) async {
     final paths = _normalizeSelection(sourcePaths);
     for (final path in paths) {
-      await _fileService.move(path, targetDir);
+      final result = await _fileService.move(path, targetDir);
+      _remapPaths(path, result.path);
     }
     _clipboardPaths = null;
     await _refreshParents(paths);
@@ -337,7 +338,7 @@ class FileExplorerController extends ChangeNotifier {
   }
 
   void setSearchQuery(String query) {
-    _searchQuery = query.trim().toLowerCase();
+    _searchQuery = query.trim();
     _invalidateItems();
     notifyListeners();
   }
@@ -533,7 +534,8 @@ class FileExplorerController extends ChangeNotifier {
 
   bool _matchesSearch(FileTreeItem item) {
     if (_searchQuery.isEmpty) return true;
-    if (item.name.toLowerCase().contains(_searchQuery)) return true;
+    final query = _searchQuery.toLowerCase();
+    if (item.name.toLowerCase().contains(query)) return true;
     return item.isDirectory &&
         item.children.any((child) => _matchesSearch(child));
   }
@@ -579,6 +581,27 @@ class FileExplorerController extends ChangeNotifier {
       return false;
     }
     return !target.path.startsWith('${source.path}${Platform.pathSeparator}');
+  }
+
+  void _remapPaths(String oldPath, String newPath) {
+    String remap(String path) => path == oldPath
+        ? newPath
+        : path.startsWith('$oldPath${Platform.pathSeparator}')
+        ? '$newPath${path.substring(oldPath.length)}'
+        : path;
+
+    final expanded = _expandedPaths.map(remap).toList();
+    _expandedPaths
+      ..clear()
+      ..addAll(expanded);
+    _selectedPath = _selectedPath == null ? null : remap(_selectedPath!);
+    final selected = _multiSelection.map(remap).toList();
+    _multiSelection
+      ..clear()
+      ..addAll(selected);
+    if (_clipboardPaths != null) {
+      _clipboardPaths = _clipboardPaths!.map(remap).toList();
+    }
   }
 
   String _basename(String path) {

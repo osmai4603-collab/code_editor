@@ -541,7 +541,9 @@ class _ExplorerTreeState extends State<ExplorerTree> {
       if (executable.isEmpty) {
         throw UnsupportedError('Terminal is not supported on this platform');
       }
-      final args = Platform.isMacOS ? ['-a', 'Terminal'] : <String>[];
+      final args = Platform.isMacOS
+          ? ['-a', 'Terminal', directory]
+          : <String>[];
       await Process.start(
         executable,
         args,

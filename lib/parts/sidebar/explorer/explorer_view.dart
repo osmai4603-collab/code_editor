@@ -24,6 +24,7 @@ class _ExplorerViewState extends State<ExplorerView> {
   bool _workspaceExpanded = true;
   EditorDocumentsController? _documentsController;
   FileExplorerController? _explorerController;
+  String? _lastActiveTabId;
 
   @override
   void didChangeDependencies() {
@@ -32,6 +33,7 @@ class _ExplorerViewState extends State<ExplorerView> {
     if (_documentsController != docs) {
       _documentsController?.removeListener(_onActiveDocumentChanged);
       _documentsController = docs;
+      _lastActiveTabId = docs.activeTab?.id;
       docs.addListener(_onActiveDocumentChanged);
     }
 
@@ -53,6 +55,8 @@ class _ExplorerViewState extends State<ExplorerView> {
   void _onActiveDocumentChanged() {
     final tab = _documentsController?.activeTab;
     final explorer = _explorerController;
+    if (tab?.id == _lastActiveTabId) return;
+    _lastActiveTabId = tab?.id;
     if (tab == null || explorer?.workspacePath == null) return;
     unawaited(
       explorer!.revealAndSelect(tab.path).catchError((Object error) {
@@ -64,6 +68,8 @@ class _ExplorerViewState extends State<ExplorerView> {
   Future<void> _openWorkspace(String path) async {
     try {
       await _explorerController?.openWorkspace(path);
+      _lastActiveTabId = null;
+      _onActiveDocumentChanged();
     } catch (error) {
       if (mounted) _showError('Unable to open workspace: $error');
     }
