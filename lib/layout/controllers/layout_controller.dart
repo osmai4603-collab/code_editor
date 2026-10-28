@@ -57,6 +57,12 @@ class WorkbenchLayoutController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// إظهار/إخفاء شريط الحالة السفلي
+  void toggleStatusBar() {
+    _state = _state.copyWith(isStatusBarVisible: !_state.isStatusBarVisible);
+    notifyListeners();
+  }
+
   /// اختيار تبويب الشريط الإضافي
   void selectAuxiliaryTab(AuxiliaryBarTab tab) {
     _state = _state.copyWith(
@@ -132,7 +138,6 @@ class WorkbenchLayoutController extends ChangeNotifier {
       isActivityBarVisible: !nextZen,
       isPanelVisible: !nextZen,
       isAuxiliaryBarVisible: false,
-      isStatusBarVisible: !nextZen,
     );
     notifyListeners();
   }

@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 
 import '../../../core/file_system/controllers/file_explorer_controller.dart';
 import '../../../core/file_system/models/file_tree_item.dart';
+import '../../../core/file_system/services/editor_file_opener.dart';
 import '../../../core/file_system/services/file_system_service.dart';
 import '../../../layout/controllers/editor_controller.dart';
 import '../../../layout/controllers/lsp_and_execution_scope.dart';
@@ -26,6 +27,7 @@ class _ExplorerTreeState extends State<ExplorerTree> {
   final ScrollController _scrollController = ScrollController();
   final Map<String, Timer> _hoverTimers = {};
   final FileSystemService _fileService = FileSystemService();
+  late final EditorFileOpener _fileOpener = EditorFileOpener(_fileService);
   bool _isRevealing = false;
 
   @override
@@ -293,14 +295,11 @@ class _ExplorerTreeState extends State<ExplorerTree> {
     EditorDocumentsController editor,
     FileTreeItem item, {
     required bool isPreview,
-  }) async {
+  }  ) async {
     try {
-      final content = await _fileService.readFileContent(item.path);
-      editor.openFile(
-        title: item.name,
+      await _fileOpener.open(
+        editor: editor,
         path: item.path,
-        languageId: _fileService.resolveLanguageId(item.name),
-        content: content,
         isPreview: isPreview,
       );
     } catch (error) {

@@ -26,6 +26,10 @@ class LspClientCapabilities {
           'dynamicRegistration': false,
           'contentFormat': ['markdown', 'plaintext'],
         },
+        'documentSymbol': {
+          'dynamicRegistration': false,
+          'hierarchicalDocumentSymbolSupport': true,
+        },
         'definition': {
           'dynamicRegistration': false,
           'linkSupport': true,
@@ -83,6 +87,7 @@ class LspServerCapabilities {
   final bool hasRename;
   final bool hasCodeAction;
   final bool hasCodeLens;
+  final bool hasDocumentSymbol;
   final Map<String, dynamic> raw;
 
   const LspServerCapabilities({
@@ -94,6 +99,7 @@ class LspServerCapabilities {
     required this.hasRename,
     required this.hasCodeAction,
     required this.hasCodeLens,
+    required this.hasDocumentSymbol,
     required this.raw,
   });
 
@@ -108,6 +114,7 @@ class LspServerCapabilities {
         hasRename: false,
         hasCodeAction: false,
         hasCodeLens: false,
+        hasDocumentSymbol: false,
         raw: {},
       );
     }
@@ -133,6 +140,8 @@ class LspServerCapabilities {
       hasRename: json.containsKey('renameProvider') && json['renameProvider'] != false,
       hasCodeAction: json.containsKey('codeActionProvider') && json['codeActionProvider'] != false,
       hasCodeLens: json.containsKey('codeLensProvider') && json['codeLensProvider'] != false,
+      hasDocumentSymbol: json['documentSymbolProvider'] == true ||
+          json['documentSymbolProvider'] is Map,
       raw: json,
     );
   }

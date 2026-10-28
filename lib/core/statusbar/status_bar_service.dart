@@ -15,9 +15,8 @@ class StatusBarService extends ChangeNotifier {
   int _nextInsertionOrder = 0;
   bool _isDisposed = false;
 
-  StatusBarService({
-    required StatusBarPreferencesStore preferencesStore,
-  }) : _preferencesStore = preferencesStore;
+  StatusBarService({required StatusBarPreferencesStore preferencesStore})
+    : _preferencesStore = preferencesStore;
 
   Future<void> initialize() => _initialization ??= _loadPreferences();
 
@@ -62,15 +61,19 @@ class StatusBarService extends ChangeNotifier {
   int _alignmentOrder(StatusBarAlignment alignment) =>
       alignment == StatusBarAlignment.left ? 0 : 1;
 
+  /// Registers a uniquely identified item; dispose the returned handle to remove it.
   StatusBarEntryHandle addEntry(StatusBarEntry entry) {
     _ensureNotDisposed();
+    if (entry.id.trim().isEmpty) {
+      throw ArgumentError.value(entry.id, 'entry.id', 'must not be empty');
+    }
+    if (entry.name.trim().isEmpty) {
+      throw ArgumentError.value(entry.name, 'entry.name', 'must not be empty');
+    }
     if (_entries.containsKey(entry.id)) {
       throw ArgumentError.value(entry.id, 'entry.id', 'must be unique');
     }
-    _entries[entry.id] = _RegisteredEntry(
-      entry,
-      _nextInsertionOrder++,
-    );
+    _entries[entry.id] = _RegisteredEntry(entry, _nextInsertionOrder++);
     notifyListeners();
     return StatusBarEntryHandle._(this, entry.id);
   }
@@ -84,26 +87,25 @@ class StatusBarService extends ChangeNotifier {
     }
     if (isEntryVisible(id) == visible) return Future<void>.value();
 
+    final nextHiddenIds = Set<String>.of(_hiddenEntryIds);
+    if (visible) {
+      nextHiddenIds.remove(id);
+    } else {
+      nextHiddenIds.add(id);
+    }
+    _hiddenEntryIds = nextHiddenIds;
+    notifyListeners();
+
+    final savedHiddenIds = Set<String>.of(nextHiddenIds);
     final completer = Completer<void>();
-    _writeQueue = _writeQueue
-        .then((_) async {
-          _ensureNotDisposed();
-          final nextHiddenIds = Set<String>.of(_hiddenEntryIds);
-          if (visible) {
-            nextHiddenIds.remove(id);
-          } else {
-            nextHiddenIds.add(id);
-          }
-          await _preferencesStore.writeHiddenEntryIds(nextHiddenIds);
-          _hiddenEntryIds = nextHiddenIds;
-          notifyListeners();
-        })
-        .then(
-          (_) => completer.complete(),
-          onError: (Object error, StackTrace stackTrace) {
-            completer.completeError(error, stackTrace);
-          },
-        );
+    _writeQueue = _writeQueue.then((_) async {
+      try {
+        await _preferencesStore.writeHiddenEntryIds(savedHiddenIds);
+        completer.complete();
+      } catch (error, stackTrace) {
+        completer.completeError(error, stackTrace);
+      }
+    });
     return completer.future;
   }
 

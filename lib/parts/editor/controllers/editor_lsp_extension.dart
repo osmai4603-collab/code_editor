@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../../../core/breadcrumbs/models/breadcrumb_symbol.dart';
 import '../../../core/execution/execution_controller.dart';
 import '../../../core/lsp/client/lsp_client.dart';
 import '../../../core/lsp/diagnostics/diagnostics_service.dart';
@@ -29,6 +30,13 @@ class EditorLspExtension extends ChangeNotifier {
   bool _showCompletions = false;
   bool _showHover = false;
   bool _hasMainFunction = false;
+  List<BreadcrumbSymbol> _documentSymbols = const [];
+  bool _documentSymbolsLoading = false;
+  String? _documentSymbolsError;
+  int _contentVersion = 0;
+  int _symbolRequestGeneration = 0;
+  bool _disposed = false;
+  String _documentText = '';
 
   EditorLspExtension({
     required this.registry,
@@ -48,6 +56,9 @@ class EditorLspExtension extends ChangeNotifier {
   bool get showCompletions => _showCompletions;
   bool get showHover => _showHover;
   bool get hasMainFunction => _hasMainFunction;
+  List<BreadcrumbSymbol> get documentSymbols => _documentSymbols;
+  bool get documentSymbolsLoading => _documentSymbolsLoading;
+  String? get documentSymbolsError => _documentSymbolsError;
 
   /// مزامنة التبويب النشط في المحرر
   Future<void> syncActiveTab(
@@ -55,9 +66,14 @@ class EditorLspExtension extends ChangeNotifier {
     String rootUri = 'file:///',
   }) async {
     if (tab == null) {
+      _symbolRequestGeneration++;
       _currentTab = null;
+      _documentText = '';
       _activeClient = null;
       _tracker = null;
+      _documentSymbols = const [];
+      _documentSymbolsLoading = false;
+      _documentSymbolsError = null;
       _showCompletions = false;
       _showHover = false;
       _hasMainFunction = false;
@@ -66,9 +82,16 @@ class EditorLspExtension extends ChangeNotifier {
     }
 
     _currentTab = tab;
+    _documentText = tab.content;
+    _contentVersion++;
+    _symbolRequestGeneration++;
+    _documentSymbols = const [];
+    _documentSymbolsLoading = false;
+    _documentSymbolsError = null;
     _checkCodeLens(tab.content);
 
     final client = await registry.getClientForFile(tab.path, rootUri: rootUri);
+    if (_disposed || _currentTab?.id != tab.id) return;
     _activeClient = client;
 
     if (client != null) {
@@ -83,6 +106,7 @@ class EditorLspExtension extends ChangeNotifier {
         );
       }
       unawaited(fetchSemanticTokens());
+      unawaited(fetchDocumentSymbols());
     }
 
     notifyListeners();
@@ -91,16 +115,111 @@ class EditorLspExtension extends ChangeNotifier {
   /// إشعار بتعديل الكود
   void onContentChanged(String newText) {
     if (_currentTab == null) return;
+    _contentVersion++;
+    _documentText = newText;
+    _symbolRequestGeneration++;
+    _documentSymbols = const [];
+    _documentSymbolsLoading = false;
+    _documentSymbolsError = null;
     _checkCodeLens(newText);
 
     final uri = _uriForPath(_currentTab!.path);
     _debouncer.recordChange(uri, newText);
+    notifyListeners();
   }
 
-  void _onDebouncedDocumentChange(String uri, String text) async {
+  void _onDebouncedDocumentChange(String uri, String text) {
+    final contentVersion = _contentVersion;
     _tracker?.didChangeFull(uri: uri, text: text);
-    await fetchSemanticTokens();
+    unawaited(fetchSemanticTokens());
+    unawaited(fetchDocumentSymbols(expectedContentVersion: contentVersion));
   }
+
+  Future<void> fetchDocumentSymbols({int? expectedContentVersion}) async {
+    final client = _activeClient;
+    final tab = _currentTab;
+    if (_disposed || client == null || tab == null) return;
+    if (expectedContentVersion != null &&
+        expectedContentVersion != _contentVersion) {
+      return;
+    }
+    if (client.serverCapabilities?.hasDocumentSymbol != true) {
+      _documentSymbols = const [];
+      _documentSymbolsLoading = false;
+      _documentSymbolsError = null;
+      notifyListeners();
+      return;
+    }
+
+    final generation = ++_symbolRequestGeneration;
+    final contentVersion = _contentVersion;
+    _documentSymbolsLoading = true;
+    _documentSymbolsError = null;
+    notifyListeners();
+    try {
+      final response = await client.sendRequest('textDocument/documentSymbol', {
+        'textDocument': {'uri': _uriForPath(tab.path)},
+      }, const Duration(seconds: 4));
+      if (!_isCurrentSymbolRequest(generation, contentVersion, tab.id)) return;
+      if (response.isError) {
+        _documentSymbols = const [];
+        _documentSymbolsLoading = false;
+        if (response.error?.code != -32601) {
+          _documentSymbolsError =
+              response.error?.message ?? 'Document symbol request failed';
+        }
+        notifyListeners();
+        return;
+      }
+
+      final parsed = LspDocumentSymbolResponse.fromJson(
+        response.result,
+        documentText: _documentText,
+      );
+      _documentSymbols = parsed.isHierarchical
+          ? List.unmodifiable(parsed.documentSymbols.map(_fromDocumentSymbol))
+          : List.unmodifiable(
+              parsed.symbolInformation.map(
+                (symbol) => BreadcrumbSymbol(
+                  name: symbol.name,
+                  kind: symbol.kind,
+                  range: symbol.range,
+                  selectionRange: symbol.range,
+                  containerName: symbol.containerName,
+                ),
+              ),
+            );
+      _documentSymbolsLoading = false;
+      _documentSymbolsError = null;
+      notifyListeners();
+    } catch (error) {
+      if (!_isCurrentSymbolRequest(generation, contentVersion, tab.id)) return;
+      _documentSymbols = const [];
+      _documentSymbolsLoading = false;
+      _documentSymbolsError = error.toString();
+      notifyListeners();
+    }
+  }
+
+  bool _isCurrentSymbolRequest(
+    int generation,
+    int contentVersion,
+    String tabId,
+  ) =>
+      !_disposed &&
+      generation == _symbolRequestGeneration &&
+      contentVersion == _contentVersion &&
+      _currentTab?.id == tabId;
+
+  BreadcrumbSymbol _fromDocumentSymbol(LspDocumentSymbol symbol) =>
+      BreadcrumbSymbol(
+        name: symbol.name,
+        kind: symbol.kind,
+        range: symbol.range,
+        selectionRange: symbol.selectionRange,
+        containerName: symbol.containerName,
+        children: List.unmodifiable(symbol.children.map(_fromDocumentSymbol)),
+      );
 
   /// طلب الرموز الدلالية من خادم اللغة
   Future<void> fetchSemanticTokens() async {
@@ -281,6 +400,8 @@ class EditorLspExtension extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
+    _symbolRequestGeneration++;
     _debouncer.dispose();
     super.dispose();
   }

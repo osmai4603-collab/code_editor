@@ -10,6 +10,7 @@ import 'package:code_editor/parts/editor/editor_area_widget.dart';
 import 'package:code_editor/parts/panel/panel_widget.dart';
 import 'package:code_editor/parts/statusbar/statusbar_widget.dart';
 import 'package:code_editor/parts/sidebar/explorer/explorer_view.dart';
+import 'package:code_editor/core/statusbar/status_bar_preferences_store.dart';
 
 void main() {
   testWidgets('CodeEditor Workbench Scaffold smoke test', (
@@ -20,7 +21,12 @@ void main() {
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
 
-    await tester.pumpWidget(const CodeEditorApp(autoStartLsp: false));
+    await tester.pumpWidget(
+      CodeEditorApp(
+        autoStartLsp: false,
+        statusBarPreferencesStore: InMemoryStatusBarPreferencesStore(),
+      ),
+    );
     await tester.pumpAndSettle();
 
     // التحقق من بناء كافة الأجزاء الأساسية للواجهة
@@ -46,7 +52,12 @@ void main() {
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
 
-    await tester.pumpWidget(const CodeEditorApp(autoStartLsp: false));
+    await tester.pumpWidget(
+      CodeEditorApp(
+        autoStartLsp: false,
+        statusBarPreferencesStore: InMemoryStatusBarPreferencesStore(),
+      ),
+    );
     await tester.pumpAndSettle();
 
     expect(find.text('No Editors Open'), findsOneWidget);
@@ -60,7 +71,12 @@ void main() {
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
 
-    await tester.pumpWidget(const CodeEditorApp(autoStartLsp: false));
+    await tester.pumpWidget(
+      CodeEditorApp(
+        autoStartLsp: false,
+        statusBarPreferencesStore: InMemoryStatusBarPreferencesStore(),
+      ),
+    );
     await tester.pumpAndSettle();
 
     final context = tester.element(find.byType(WorkbenchScaffold));

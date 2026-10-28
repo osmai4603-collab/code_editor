@@ -21,6 +21,10 @@ class EditorThemeData {
   final Color editorLineNumberActive;
   final Color editorCurrentLineHighlight;
   final Color editorSelection;
+  final Color editorScrollbarTrack;
+  final Color editorScrollbarThumb;
+  final Color editorScrollbarThumbHover;
+  final Color editorScrollbarThumbActive;
   final Color tabActiveBackground;
   final Color tabActiveForeground;
   final Color tabActiveBorderTop;
@@ -35,6 +39,11 @@ class EditorThemeData {
   final Color statusBarBackground;
   final Color statusBarForeground;
   final Color statusBarItemHover;
+  final Color statusBarItemFocus;
+  final Color statusBarWarningForeground;
+  final Color statusBarWarningBackground;
+  final Color statusBarErrorForeground;
+  final Color statusBarErrorBackground;
   final Color auxiliaryBarBackground;
   final Color auxiliaryBarBorder;
   final Color sashHover;
@@ -68,6 +77,10 @@ class EditorThemeData {
     required this.editorLineNumberActive,
     required this.editorCurrentLineHighlight,
     required this.editorSelection,
+    required this.editorScrollbarTrack,
+    required this.editorScrollbarThumb,
+    required this.editorScrollbarThumbHover,
+    required this.editorScrollbarThumbActive,
     required this.tabActiveBackground,
     required this.tabActiveForeground,
     required this.tabActiveBorderTop,
@@ -82,6 +95,11 @@ class EditorThemeData {
     required this.statusBarBackground,
     required this.statusBarForeground,
     required this.statusBarItemHover,
+    required this.statusBarItemFocus,
+    required this.statusBarWarningForeground,
+    required this.statusBarWarningBackground,
+    required this.statusBarErrorForeground,
+    required this.statusBarErrorBackground,
     required this.auxiliaryBarBackground,
     required this.auxiliaryBarBorder,
     required this.sashHover,
@@ -117,6 +135,10 @@ class EditorThemeData {
     editorLineNumberActive: Color(0xFFCCCCCC),
     editorCurrentLineHighlight: Color(0x1AFFFFFF),
     editorSelection: Color(0x33264F78),
+    editorScrollbarTrack: Color(0x337F7F7F),
+    editorScrollbarThumb: Color(0x997F7F7F),
+    editorScrollbarThumbHover: Color(0xCC9E9E9E),
+    editorScrollbarThumbActive: Color(0xFF0078D4),
     tabActiveBackground: Color(0xFF1F1F1F),
     tabActiveForeground: Color(0xFFFFFFFF),
     tabActiveBorderTop: Color(0xFF0078D4),
@@ -131,6 +153,11 @@ class EditorThemeData {
     statusBarBackground: Color(0xFF181818),
     statusBarForeground: Color(0xFFCCCCCC),
     statusBarItemHover: Color(0x1AFFFFFF),
+    statusBarItemFocus: Color(0xFFFFFFFF),
+    statusBarWarningForeground: Color(0xFFFFD580),
+    statusBarWarningBackground: Color(0xFF5A4300),
+    statusBarErrorForeground: Color(0xFFFFB4AB),
+    statusBarErrorBackground: Color(0xFF5C1F1A),
     auxiliaryBarBackground: Color(0xFF1E1E1E),
     auxiliaryBarBorder: Color(0xFF2B2B2B),
     sashHover: Color(0xFF0078D4),

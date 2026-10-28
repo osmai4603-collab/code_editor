@@ -55,6 +55,266 @@ class LspRange {
   String toString() => 'Range($start -> $end)';
 }
 
+enum LspSymbolKind {
+  file(1),
+  module(2),
+  namespace(3),
+  package(4),
+  classKind(5),
+  method(6),
+  property(7),
+  field(8),
+  constructor(9),
+  enumKind(10),
+  interfaceKind(11),
+  function(12),
+  variable(13),
+  constant(14),
+  string(15),
+  number(16),
+  boolean(17),
+  array(18),
+  object(19),
+  key(20),
+  nullKind(21),
+  enumMember(22),
+  struct(23),
+  event(24),
+  operatorKind(25),
+  typeParameter(26),
+  unknown(0);
+
+  final int value;
+  const LspSymbolKind(this.value);
+
+  static LspSymbolKind fromValue(int value) {
+    for (final kind in LspSymbolKind.values) {
+      if (kind.value == value && kind != unknown) return kind;
+    }
+    return unknown;
+  }
+}
+
+class LspDocumentSymbol {
+  final String name;
+  final LspSymbolKind kind;
+  final LspRange range;
+  final LspRange selectionRange;
+  final String? detail;
+  final String? containerName;
+  final List<LspDocumentSymbol> children;
+
+  const LspDocumentSymbol({
+    required this.name,
+    required this.kind,
+    required this.range,
+    required this.selectionRange,
+    this.detail,
+    this.containerName,
+    this.children = const [],
+  });
+
+  static LspDocumentSymbol? tryParse(
+    dynamic value, {
+    String? documentText,
+  }) {
+    final json = _stringKeyedMap(value);
+    if (json == null ||
+        json['name'] is! String ||
+        (json['name'] as String).isEmpty ||
+        json['kind'] is! int ||
+        json['range'] is! Map ||
+        json['selectionRange'] is! Map) {
+      return null;
+    }
+
+    final range = _parseValidRange(json['range'], documentText);
+    final selectionRange = _parseValidRange(
+      json['selectionRange'],
+      documentText,
+    );
+    if (range == null ||
+        selectionRange == null ||
+        !_containsRange(range, selectionRange)) {
+      return null;
+    }
+
+    final children = <LspDocumentSymbol>[];
+    final rawChildren = json['children'];
+    if (rawChildren is List) {
+      for (final rawChild in rawChildren) {
+        final child = tryParse(rawChild, documentText: documentText);
+        if (child != null) children.add(child);
+      }
+    }
+
+    return LspDocumentSymbol(
+      name: json['name'] as String,
+      kind: LspSymbolKind.fromValue(json['kind'] as int),
+      range: range,
+      selectionRange: selectionRange,
+      detail: json['detail'] as String?,
+      children: List.unmodifiable(children),
+    );
+  }
+}
+
+class LspSymbolInformation {
+  final String name;
+  final LspSymbolKind kind;
+  final LspRange range;
+  final String? containerName;
+
+  const LspSymbolInformation({
+    required this.name,
+    required this.kind,
+    required this.range,
+    this.containerName,
+  });
+
+  static LspSymbolInformation? tryParse(
+    dynamic value, {
+    String? documentText,
+  }) {
+    final json = _stringKeyedMap(value);
+    final location = _stringKeyedMap(json?['location']);
+    if (json == null ||
+        json['name'] is! String ||
+        (json['name'] as String).isEmpty ||
+        json['kind'] is! int ||
+        location == null ||
+        location['range'] is! Map) {
+      return null;
+    }
+    final range = _parseValidRange(location['range'], documentText);
+    if (range == null) return null;
+
+    return LspSymbolInformation(
+      name: json['name'] as String,
+      kind: LspSymbolKind.fromValue(json['kind'] as int),
+      range: range,
+      containerName: json['containerName'] as String?,
+    );
+  }
+}
+
+class LspDocumentSymbolResponse {
+  final bool isHierarchical;
+  final List<LspDocumentSymbol> documentSymbols;
+  final List<LspSymbolInformation> symbolInformation;
+
+  const LspDocumentSymbolResponse._({
+    required this.isHierarchical,
+    required this.documentSymbols,
+    required this.symbolInformation,
+  });
+
+  factory LspDocumentSymbolResponse.fromJson(
+    dynamic value, {
+    String? documentText,
+  }) {
+    if (value is! List) {
+      return const LspDocumentSymbolResponse._(
+        isHierarchical: true,
+        documentSymbols: [],
+        symbolInformation: [],
+      );
+    }
+
+    final entries = value.whereType<Map>();
+    final isHierarchical = entries.any(
+      (entry) => entry.containsKey('selectionRange'),
+    );
+    if (isHierarchical) {
+      final symbols = value
+          .map(
+            (entry) => LspDocumentSymbol.tryParse(
+              entry,
+              documentText: documentText,
+            ),
+          )
+          .whereType<LspDocumentSymbol>()
+          .toList();
+      return LspDocumentSymbolResponse._(
+        isHierarchical: true,
+        documentSymbols: List.unmodifiable(symbols),
+        symbolInformation: const [],
+      );
+    }
+
+    final symbols = value
+        .map(
+          (entry) => LspSymbolInformation.tryParse(
+            entry,
+            documentText: documentText,
+          ),
+        )
+        .whereType<LspSymbolInformation>()
+        .toList();
+    return LspDocumentSymbolResponse._(
+      isHierarchical: false,
+      documentSymbols: const [],
+      symbolInformation: List.unmodifiable(symbols),
+    );
+  }
+}
+
+Map<String, dynamic>? _stringKeyedMap(dynamic value) {
+  if (value is Map<String, dynamic>) return value;
+  if (value is! Map) return null;
+  return {
+    for (final entry in value.entries)
+      if (entry.key is String) entry.key as String: entry.value,
+  };
+}
+
+LspRange? _parseValidRange(dynamic value, String? documentText) {
+  final json = _stringKeyedMap(value);
+  if (json == null) return null;
+  final start = _stringKeyedMap(json['start']);
+  final end = _stringKeyedMap(json['end']);
+  if (start == null ||
+      end == null ||
+      start['line'] is! int ||
+      start['character'] is! int ||
+      end['line'] is! int ||
+      end['character'] is! int) {
+    return null;
+  }
+  final range = LspRange.fromJson(json);
+  if (range.start.line < 0 ||
+      range.start.character < 0 ||
+      range.end.line < 0 ||
+      range.end.character < 0 ||
+      _comparePositions(range.start, range.end) > 0) {
+    return null;
+  }
+  if (documentText != null &&
+      (!_positionFitsDocument(range.start, documentText) ||
+          !_positionFitsDocument(range.end, documentText))) {
+    return null;
+  }
+  return range;
+}
+
+bool _positionFitsDocument(LspPosition position, String text) {
+  if (position.line < 0 || position.character < 0) return false;
+  final lines = text.split('\n');
+  return position.line < lines.length &&
+      position.character <= lines[position.line].length;
+}
+
+bool _containsRange(LspRange outer, LspRange inner) =>
+    _comparePositions(outer.start, inner.start) <= 0 &&
+    _comparePositions(inner.end, outer.end) <= 0;
+
+int _comparePositions(LspPosition left, LspPosition right) {
+  final lineComparison = left.line.compareTo(right.line);
+  return lineComparison != 0
+      ? lineComparison
+      : left.character.compareTo(right.character);
+}
+
 /// موقع في ملف معين مع النطاق
 class LspLocation {
   final String uri;

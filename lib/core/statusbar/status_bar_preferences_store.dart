@@ -15,7 +15,9 @@ class SharedPreferencesStatusBarPreferencesStore
     final preferences = await SharedPreferences.getInstance();
     final value = preferences.get(_hiddenEntryIdsKey);
     if (value == null) return <String>{};
-    if (value is List<String>) return value.where((id) => id.isNotEmpty).toSet();
+    if (value is List && value.every((id) => id is String)) {
+      return value.cast<String>().where((id) => id.isNotEmpty).toSet();
+    }
     throw FormatException('Invalid status bar preferences value');
   }
 

@@ -97,6 +97,20 @@ void main() {
     ]);
   });
 
+  test('sorts and filters entries shown by breadcrumb navigation', () async {
+    await Directory('${tempDirectory.path}/z-folder').create();
+    await File('${tempDirectory.path}/b.txt').writeAsString('');
+    await File('${tempDirectory.path}/a.txt').writeAsString('');
+    await File('${tempDirectory.path}/.hidden').writeAsString('');
+    await Directory('${tempDirectory.path}/.git').create();
+
+    final entries = await controller.listDirectoryForNavigation(
+      tempDirectory.path,
+    );
+
+    expect(entries.map((item) => item.name), ['z-folder', 'a.txt', 'b.txt']);
+  });
+
   test(
     'updates the tree after create, rename, and delete operations',
     () async {

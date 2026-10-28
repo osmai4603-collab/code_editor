@@ -106,6 +106,15 @@ class TitleBarWidget extends StatelessWidget {
                 onPressed: layoutController.toggleAuxiliaryBar,
               ),
               _buildIconButton(
+                icon: Icons.horizontal_rule_rounded,
+                tooltip: layoutState.isStatusBarVisible
+                    ? 'Hide Status Bar'
+                    : 'Show Status Bar',
+                isActive: layoutState.isStatusBarVisible,
+                theme: theme,
+                onPressed: layoutController.toggleStatusBar,
+              ),
+              _buildIconButton(
                 icon: Icons.fullscreen_rounded,
                 tooltip: 'Zen Mode',
                 isActive: layoutState.isZenMode,

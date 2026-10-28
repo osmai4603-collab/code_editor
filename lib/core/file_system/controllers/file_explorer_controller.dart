@@ -90,6 +90,11 @@ class FileExplorerController extends ChangeNotifier {
   List<String> get selectedPaths => List.unmodifiable(_multiSelection);
   Future<bool> exists(String path) => _fileService.exists(path);
 
+  Future<List<FileTreeItem>> listDirectoryForNavigation(String path) async {
+    final children = await _fileService.listDirectory(path);
+    return List.unmodifiable(_sortChildren(children).where(_shouldShow));
+  }
+
   void clearError() {
     if (_error == null) return;
     _error = null;
