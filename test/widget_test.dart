@@ -8,9 +8,12 @@ import 'package:code_editor/parts/sidebar/sidebar_widget.dart';
 import 'package:code_editor/parts/editor/editor_area_widget.dart';
 import 'package:code_editor/parts/panel/panel_widget.dart';
 import 'package:code_editor/parts/statusbar/statusbar_widget.dart';
+import 'package:code_editor/parts/sidebar/explorer/explorer_view.dart';
 
 void main() {
-  testWidgets('CodeEditor Workbench Scaffold smoke test', (WidgetTester tester) async {
+  testWidgets('CodeEditor Workbench Scaffold smoke test', (
+    WidgetTester tester,
+  ) async {
     // محاكاة شاشة حاسوب مكتبية (Desktop resolution 1280x800)
     tester.view.physicalSize = const Size(1280, 800);
     tester.view.devicePixelRatio = 1.0;
@@ -28,8 +31,10 @@ void main() {
     expect(find.byType(PanelWidget), findsOneWidget);
     expect(find.byType(StatusBarWidget), findsOneWidget);
 
-    // التحقق من وجود التبويبات الافتراضية
-    expect(find.text('main.dart'), findsWidgets);
-    expect(find.text('editor_theme.dart'), findsWidgets);
+    // المستكشف يعرض مساحة العمل الحقيقية ولا يفتح ملفات استعراضية.
+    expect(find.byType(ExplorerView), findsOneWidget);
+    expect(find.text('No Editors Open'), findsOneWidget);
+    expect(find.text('main.dart'), findsNothing);
+    expect(find.text('editor_theme.dart'), findsNothing);
   });
 }

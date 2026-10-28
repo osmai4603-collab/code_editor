@@ -3,27 +3,54 @@ import 'dart:io';
 import '../models/file_tree_item.dart';
 
 class FileSystemService {
+  static const excludedDirectoryNames = {
+    '.git',
+    '.dart_tool',
+    'build',
+    '.idea',
+    '.vscode',
+    'node_modules',
+    '.DS_Store',
+  };
+
   Future<List<FileTreeItem>> listDirectory(String path) async {
     final directory = Directory(path);
     final entries = await directory.list(followLinks: false).toList();
-    final items = <FileTreeItem>[];
-    for (final entry in entries) {
-      final type = await FileSystemEntity.type(entry.path, followLinks: false);
-      final isDirectory = type == FileSystemEntityType.directory;
-      final isLink = type == FileSystemEntityType.link;
-      final stat = isLink ? null : await entry.stat();
-      items.add(
-        FileTreeItem(
-          name: _basename(entry.path),
-          path: entry.path,
-          isDirectory: isDirectory,
-          isSymbolicLink: isLink,
-          modifiedAt: stat?.modified,
-          sizeBytes: isDirectory || isLink ? null : stat?.size,
-        ),
-      );
+    return Future.wait(entries.map(_itemFor));
+  }
+
+  Future<List<String>> searchPaths(
+    String rootPath,
+    String query, {
+    bool showHiddenFiles = false,
+  }) async {
+    final normalizedQuery = query.toLowerCase();
+    final results = <String>[];
+
+    Future<void> visit(Directory directory) async {
+      await for (final entity in directory.list(followLinks: false)) {
+        final name = _basename(entity.path);
+        if (excludedDirectoryNames.contains(name) ||
+            (!showHiddenFiles && name.startsWith('.'))) {
+          continue;
+        }
+
+        if (name.toLowerCase().contains(normalizedQuery)) {
+          results.add(entity.path);
+        }
+
+        final type = await FileSystemEntity.type(
+          entity.path,
+          followLinks: false,
+        );
+        if (type == FileSystemEntityType.directory) {
+          await visit(Directory(entity.path));
+        }
+      }
     }
-    return items;
+
+    await visit(Directory(rootPath));
+    return results;
   }
 
   Future<String> readFileContent(String path) => File(path).readAsString();

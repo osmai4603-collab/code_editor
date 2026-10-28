@@ -96,6 +96,15 @@ class _ExplorerTreeState extends State<ExplorerTree> {
               isExpanded: controller.isExpanded(item),
               isCut: controller.isCut(item.path),
               isEditing: controller.isEditing(item.path),
+              highlightQuery:
+                  controller.searchMode == ExplorerSearchMode.highlight &&
+                      controller.isSearchMatch(item.path)
+                  ? controller.searchQuery
+                  : null,
+              gitStatus: controller.gitStatusFor(
+                item.path,
+                isDirectory: item.isDirectory,
+              ),
               trailing: fileDiagnostics.isNotEmpty
                   ? Tooltip(
                       message: '${fileDiagnostics.length} problem(s)',
@@ -200,6 +209,13 @@ class _ExplorerTreeState extends State<ExplorerTree> {
         HardwareKeyboard.instance.isShiftPressed &&
         selected != null) {
       Clipboard.setData(ClipboardData(text: selected.relativePath));
+      return KeyEventResult.handled;
+    }
+    if (HardwareKeyboard.instance.isAltPressed &&
+        HardwareKeyboard.instance.isShiftPressed &&
+        key == LogicalKeyboardKey.keyC &&
+        selected != null) {
+      Clipboard.setData(ClipboardData(text: selected.path));
       return KeyEventResult.handled;
     }
     if (control && key == LogicalKeyboardKey.keyC && selected != null) {
@@ -346,6 +362,9 @@ class _ExplorerTreeState extends State<ExplorerTree> {
       await controller.delete(paths);
       editor.closePaths(paths);
     } catch (error) {
+      for (final path in paths) {
+        if (!await controller.exists(path)) editor.closePaths([path]);
+      }
       if (!context.mounted) return;
       _showError(context, 'Unable to delete selected items: $error');
     }

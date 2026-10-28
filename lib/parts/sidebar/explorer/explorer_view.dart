@@ -33,7 +33,7 @@ class _ExplorerViewState extends State<ExplorerView> {
     if (_documentsController != docs) {
       _documentsController?.removeListener(_onActiveDocumentChanged);
       _documentsController = docs;
-      _lastActiveTabId = docs.activeTab?.id;
+      _lastActiveTabId = null;
       docs.addListener(_onActiveDocumentChanged);
     }
 
@@ -43,6 +43,9 @@ class _ExplorerViewState extends State<ExplorerView> {
       if (explorer.root == null) {
         unawaited(_openWorkspace(Directory.current.path));
       }
+    }
+    if (_explorerController?.workspacePath != null) {
+      _onActiveDocumentChanged();
     }
   }
 

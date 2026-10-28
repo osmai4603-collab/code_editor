@@ -9,6 +9,8 @@ import '../models/sort_config.dart';
 import '../services/file_system_service.dart';
 import '../services/file_watcher_service.dart';
 
+enum ExplorerSearchMode { filter, highlight }
+
 class FileExplorerController extends ChangeNotifier {
   final FileSystemService _fileService;
   final FileWatcherService _watcherService;
@@ -30,6 +32,15 @@ class FileExplorerController extends ChangeNotifier {
   bool _clipboardIsCut = false;
   bool _showHiddenFiles = false;
   String _searchQuery = '';
+  ExplorerSearchMode _searchMode = ExplorerSearchMode.filter;
+  Set<String> _searchResultPaths = {};
+  Set<String> _searchAncestorPaths = {};
+  Timer? _searchDebouncer;
+  Timer? _gitStatusDebouncer;
+  int _searchGeneration = 0;
+  int _gitStatusGeneration = 0;
+  bool _isSearching = false;
+  Map<String, String> _gitStatuses = {};
   Timer? _refreshDebouncer;
   List<FileTreeItem>? _cachedVisibleItems;
   bool _isDirty = true;
@@ -49,6 +60,16 @@ class FileExplorerController extends ChangeNotifier {
     );
   }
 
+  void _removeSelectionForPath(String path) {
+    bool isDeleted(String candidate) =>
+        candidate == path ||
+        candidate.startsWith('$path${Platform.pathSeparator}');
+    _multiSelection.removeWhere(isDeleted);
+    if (_selectedPath != null && isDeleted(_selectedPath!)) {
+      _selectedPath = _multiSelection.isEmpty ? null : _multiSelection.last;
+    }
+  }
+
   FileTreeItem? get root => _root;
   String? get workspacePath => _workspacePath;
   bool get isLoading => _isLoading;
@@ -58,6 +79,9 @@ class FileExplorerController extends ChangeNotifier {
   String? get creatingInPath => _creatingInPath;
   bool get creatingIsDirectory => _creatingIsDirectory;
   String get searchQuery => _searchQuery;
+  ExplorerSearchMode get searchMode => _searchMode;
+  bool get isSearching => _isSearching;
+  Map<String, String> get gitStatuses => Map.unmodifiable(_gitStatuses);
   bool get hasClipboardItems => _clipboardPaths?.isNotEmpty ?? false;
   bool get clipboardIsCut => _clipboardIsCut;
   List<String> get clipboardPaths =>
@@ -79,6 +103,14 @@ class FileExplorerController extends ChangeNotifier {
     }
 
     _isLoading = true;
+    _searchGeneration++;
+    _gitStatusGeneration++;
+    _gitStatuses = {};
+    _searchDebouncer?.cancel();
+    _searchQuery = '';
+    _searchResultPaths.clear();
+    _searchAncestorPaths.clear();
+    _isSearching = false;
     _error = null;
     notifyListeners();
     try {
@@ -99,6 +131,7 @@ class FileExplorerController extends ChangeNotifier {
       _invalidateItems();
       await _watcherService.watch(normalizedPath);
       await restoreState();
+      _scheduleGitStatusRefresh();
     } catch (error) {
       _error = error.toString();
       rethrow;
@@ -190,8 +223,16 @@ class FileExplorerController extends ChangeNotifier {
   }
 
   void multiSelect(FileTreeItem item) {
-    if (!_multiSelection.add(item.path)) _multiSelection.remove(item.path);
-    _selectedPath = item.path;
+    if (_multiSelection.add(item.path)) {
+      _selectedPath = item.path;
+    } else {
+      _multiSelection.remove(item.path);
+      if (_multiSelection.isEmpty) {
+        _selectedPath = null;
+      } else if (_selectedPath == item.path) {
+        _selectedPath = _multiSelection.last;
+      }
+    }
     notifyListeners();
   }
 
@@ -204,6 +245,7 @@ class FileExplorerController extends ChangeNotifier {
   Future<FileTreeItem> createFile(String parentPath, String name) async {
     final result = await _fileService.createFile(_join(parentPath, name));
     await refresh(path: parentPath);
+    _scheduleGitStatusRefresh();
     cancelEdit();
     select(findItem(result.path) ?? result);
     return result;
@@ -212,6 +254,7 @@ class FileExplorerController extends ChangeNotifier {
   Future<FileTreeItem> createDirectory(String parentPath, String name) async {
     final result = await _fileService.createDirectory(_join(parentPath, name));
     await refresh(path: parentPath);
+    _scheduleGitStatusRefresh();
     cancelEdit();
     select(findItem(result.path) ?? result);
     return result;
@@ -219,19 +262,23 @@ class FileExplorerController extends ChangeNotifier {
 
   Future<void> delete(List<String> paths) async {
     final normalized = _normalizeSelection(paths);
-    for (final path in normalized) {
-      await _fileService.delete(path, recursive: true);
-    }
-    bool isDeleted(String candidate) => normalized.any(
-      (path) =>
-          candidate == path ||
-          candidate.startsWith('$path${Platform.pathSeparator}'),
-    );
-    _multiSelection.removeWhere(isDeleted);
-    if (_selectedPath != null && isDeleted(_selectedPath!)) {
-      _selectedPath = null;
+    try {
+      for (final path in normalized) {
+        await _fileService.delete(path, recursive: true);
+        _removeSelectionForPath(path);
+      }
+    } catch (_) {
+      try {
+        await _refreshParents(normalized);
+      } catch (refreshError) {
+        _error = 'Unable to refresh after a partial delete: $refreshError';
+        notifyListeners();
+      }
+      _scheduleGitStatusRefresh();
+      rethrow;
     }
     await _refreshParents(normalized);
+    _scheduleGitStatusRefresh();
   }
 
   Future<void> rename(String path, String newName) async {
@@ -240,25 +287,51 @@ class FileExplorerController extends ChangeNotifier {
     _remapPaths(path, result.path);
     cancelEdit();
     await refresh(path: parentPath);
+    _scheduleGitStatusRefresh();
   }
 
   Future<void> move(List<String> sourcePaths, String targetDir) async {
     final paths = _normalizeSelection(sourcePaths);
-    for (final path in paths) {
-      final result = await _fileService.move(path, targetDir);
-      _remapPaths(path, result.path);
+    try {
+      for (final path in paths) {
+        final result = await _fileService.move(path, targetDir);
+        _remapPaths(path, result.path);
+      }
+    } catch (_) {
+      try {
+        await _refreshParents(paths);
+        await refresh(path: targetDir);
+      } catch (refreshError) {
+        _error = 'Unable to refresh after a partial move: $refreshError';
+        notifyListeners();
+      }
+      _scheduleGitStatusRefresh();
+      rethrow;
     }
     _clipboardPaths = null;
     await _refreshParents(paths);
     await refresh(path: targetDir);
+    _scheduleGitStatusRefresh();
   }
 
   Future<void> copy(List<String> sourcePaths, String targetDir) async {
     final paths = _normalizeSelection(sourcePaths);
-    for (final path in paths) {
-      await _fileService.copy(path, targetDir);
+    try {
+      for (final path in paths) {
+        await _fileService.copy(path, targetDir);
+      }
+    } catch (_) {
+      try {
+        await refresh(path: targetDir);
+      } catch (refreshError) {
+        _error = 'Unable to refresh after a partial copy: $refreshError';
+        notifyListeners();
+      }
+      _scheduleGitStatusRefresh();
+      rethrow;
     }
     await refresh(path: targetDir);
+    _scheduleGitStatusRefresh();
   }
 
   void cut(List<String> paths) {
@@ -332,15 +405,187 @@ class FileExplorerController extends ChangeNotifier {
   }
 
   void setShowHiddenFiles(bool value) {
+    if (_showHiddenFiles == value) return;
     _showHiddenFiles = value;
+    setSearchQuery(_searchQuery);
+  }
+
+  void setSearchQuery(String query) {
+    final normalizedQuery = query.trim();
+    _searchQuery = normalizedQuery;
+    _searchGeneration++;
+    final generation = _searchGeneration;
+    _searchDebouncer?.cancel();
+    _searchResultPaths = {};
+    _searchAncestorPaths = {};
+    _isSearching = normalizedQuery.isNotEmpty;
+    _invalidateItems();
+    notifyListeners();
+    if (normalizedQuery.isEmpty) return;
+    _searchDebouncer = Timer(const Duration(milliseconds: 200), () {
+      unawaited(_searchWorkspace(normalizedQuery, generation));
+    });
+  }
+
+  void setSearchMode(ExplorerSearchMode mode) {
+    if (_searchMode == mode) return;
+    _searchMode = mode;
     _invalidateItems();
     notifyListeners();
   }
 
-  void setSearchQuery(String query) {
-    _searchQuery = query.trim();
-    _invalidateItems();
-    notifyListeners();
+  bool isSearchMatch(String path) =>
+      _searchQuery.isNotEmpty && _searchResultPaths.contains(path);
+
+  String? gitStatusFor(String path, {bool isDirectory = false}) {
+    final exact = _gitStatuses[path];
+    if (exact != null || !isDirectory) return exact;
+    final prefix = '$path${Platform.pathSeparator}';
+    final descendants = _gitStatuses.entries
+        .where((entry) => entry.key.startsWith(prefix))
+        .map((entry) => entry.value);
+    final statuses = descendants.toSet();
+    if (statuses.isEmpty) return null;
+    if (statuses.contains('M') || statuses.contains('D')) return 'M';
+    if (statuses.contains('A')) return 'A';
+    if (statuses.contains('R')) return 'R';
+    return 'U';
+  }
+
+  Future<void> refreshGitStatus() async {
+    final workspace = _workspacePath;
+    if (workspace == null) return;
+    final generation = ++_gitStatusGeneration;
+    try {
+      final result = await Process.run('git', [
+        '-C',
+        workspace,
+        '-c',
+        'core.quotepath=false',
+        'status',
+        '--porcelain=v1',
+        '-z',
+        '--untracked-files=all',
+      ]);
+      if (_disposed || generation != _gitStatusGeneration) return;
+      if (result.exitCode != 0) {
+        final message = '${result.stderr}'.trim();
+        if (message.toLowerCase().contains('not a git repository')) {
+          _gitStatuses = {};
+          notifyListeners();
+          return;
+        }
+        throw ProcessException(
+          'git',
+          ['status', '--porcelain=v1'],
+          message,
+          result.exitCode,
+        );
+      }
+
+      final statuses = <String, String>{};
+      final entries = '${result.stdout}'.split('\u0000');
+      for (var index = 0; index < entries.length; index++) {
+        final entry = entries[index];
+        if (entry.length < 4) continue;
+        final state = entry.substring(0, 2);
+        final path = entry.substring(3);
+        final status = state.contains('D')
+            ? 'D'
+            : state.contains('A')
+            ? 'A'
+            : state.contains('R')
+            ? 'R'
+            : state.contains('M')
+            ? 'M'
+            : state.contains('?')
+            ? 'U'
+            : '';
+        if (status.isNotEmpty) {
+          statuses[_join(
+                workspace,
+                path.replaceAll('/', Platform.pathSeparator),
+              )] =
+              status;
+        }
+        if (state.contains('R') || state.contains('C')) {
+          index++;
+        }
+      }
+      _gitStatuses = statuses;
+      notifyListeners();
+    } catch (error) {
+      if (_disposed || generation != _gitStatusGeneration) return;
+      _error = 'Unable to read Git status: $error';
+      notifyListeners();
+    }
+  }
+
+  void _scheduleGitStatusRefresh() {
+    _gitStatusDebouncer?.cancel();
+    _gitStatusDebouncer = Timer(const Duration(milliseconds: 350), () {
+      unawaited(refreshGitStatus());
+    });
+  }
+
+  Future<void> _searchWorkspace(String query, int generation) async {
+    final workspace = _workspacePath;
+    if (workspace == null) {
+      _isSearching = false;
+      notifyListeners();
+      return;
+    }
+    try {
+      final matches = await _fileService.searchPaths(
+        workspace,
+        query,
+        showHiddenFiles: _showHiddenFiles,
+      );
+      if (_disposed || generation != _searchGeneration) return;
+
+      final results = <String>{};
+      final ancestors = <String>{};
+      for (final match in matches) {
+        results.add(match);
+        var parent = _dirname(match);
+        while (parent != workspace &&
+            parent.startsWith('$workspace${Platform.pathSeparator}')) {
+          ancestors.add(parent);
+          parent = _dirname(parent);
+        }
+      }
+      _searchResultPaths = results;
+      _searchAncestorPaths = ancestors;
+      await _resolveSearchAncestors(workspace, ancestors, generation);
+      if (_disposed || generation != _searchGeneration) return;
+      _isSearching = false;
+      _invalidateItems();
+      notifyListeners();
+    } catch (error) {
+      if (_disposed || generation != _searchGeneration) return;
+      _isSearching = false;
+      _error = 'Unable to search workspace: $error';
+      notifyListeners();
+    }
+  }
+
+  Future<void> _resolveSearchAncestors(
+    String path,
+    Set<String> ancestors,
+    int generation,
+  ) async {
+    if (generation != _searchGeneration || _disposed) return;
+    final directory = findItem(path);
+    if (directory == null || !directory.isDirectory) return;
+    if (!directory.isResolved) {
+      directory.children = await _fileService.listDirectory(directory.path);
+    }
+    for (final child in directory.children) {
+      if (ancestors.contains(child.path)) {
+        _expandedPaths.add(child.path);
+        await _resolveSearchAncestors(child.path, ancestors, generation);
+      }
+    }
   }
 
   Future<void> refresh({String? path}) async {
@@ -378,7 +623,7 @@ class FileExplorerController extends ChangeNotifier {
         if (!_shouldShow(item) || !_matchesSearch(item)) return;
         result.add(item);
         if (item.isDirectory &&
-            (isExpanded(item) || _searchQuery.isNotEmpty) &&
+            (isExpanded(item) || _searchAncestorPaths.contains(item.path)) &&
             item.isResolved) {
           for (final child in _sortChildren(item.children)) {
             walk(child);
@@ -442,7 +687,10 @@ class FileExplorerController extends ChangeNotifier {
         affected.add(directory);
       }
     }
-    if (affected.isEmpty) return;
+    if (affected.isEmpty) {
+      _scheduleGitStatusRefresh();
+      return;
+    }
     _refreshDebouncer?.cancel();
     _refreshDebouncer = Timer(const Duration(milliseconds: 150), () async {
       if (_disposed) return;
@@ -455,6 +703,7 @@ class FileExplorerController extends ChangeNotifier {
           notifyListeners();
         }
       }
+      _scheduleGitStatusRefresh();
     });
   }
 
@@ -534,10 +783,9 @@ class FileExplorerController extends ChangeNotifier {
 
   bool _matchesSearch(FileTreeItem item) {
     if (_searchQuery.isEmpty) return true;
-    final query = _searchQuery.toLowerCase();
-    if (item.name.toLowerCase().contains(query)) return true;
-    return item.isDirectory &&
-        item.children.any((child) => _matchesSearch(child));
+    if (_searchMode == ExplorerSearchMode.highlight) return true;
+    return _searchResultPaths.contains(item.path) ||
+        _searchAncestorPaths.contains(item.path);
   }
 
   bool _isWithinWorkspace(String path) {
@@ -626,6 +874,8 @@ class FileExplorerController extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     _refreshDebouncer?.cancel();
+    _searchDebouncer?.cancel();
+    _gitStatusDebouncer?.cancel();
     unawaited(_watcherSubscription.cancel());
     unawaited(_watcherService.dispose());
     super.dispose();

@@ -12,6 +12,8 @@ class FileTreeTile extends StatelessWidget {
   final bool isExpanded;
   final bool isCut;
   final bool isEditing;
+  final String? highlightQuery;
+  final String? gitStatus;
   final VoidCallback? onTap;
   final VoidCallback? onDoubleTap;
   final VoidCallback? onToggleExpand;
@@ -34,6 +36,8 @@ class FileTreeTile extends StatelessWidget {
     this.isExpanded = false,
     this.isCut = false,
     this.isEditing = false,
+    this.highlightQuery,
+    this.gitStatus,
     this.onTap,
     this.onDoubleTap,
     this.onToggleExpand,
@@ -114,8 +118,8 @@ class FileTreeTile extends StatelessWidget {
                         onSubmit: onRenameSubmit ?? (_) {},
                         onCancel: onRenameCancelled ?? () {},
                       )
-                    : Text(
-                        item.name,
+                    : Text.rich(
+                        TextSpan(children: _nameSpans(theme)),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
@@ -127,6 +131,21 @@ class FileTreeTile extends StatelessWidget {
                         ),
                       ),
               ),
+              if (!isEditing && gitStatus != null)
+                Padding(
+                  padding: const EdgeInsets.only(left: 5),
+                  child: Tooltip(
+                    message: _gitStatusDescription(gitStatus!),
+                    child: Text(
+                      gitStatus!,
+                      style: TextStyle(
+                        color: _gitStatusColor(gitStatus!),
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
               if (item.isSymbolicLink)
                 Padding(
                   padding: const EdgeInsets.only(left: 3),
@@ -152,6 +171,9 @@ class FileTreeTile extends StatelessWidget {
       onAcceptWithDetails: (details) => onDragAcceptItem?.call(details.data),
       builder: (context, candidateData, rejectedData) {
         final target = candidateData.isNotEmpty || isDropTarget;
+        final visibleContent = isCut
+            ? Opacity(opacity: 0.5, child: content)
+            : content;
         return Draggable<FileTreeItem>(
           data: item,
           maxSimultaneousDrags: item.isRoot ? 0 : 1,
@@ -168,8 +190,11 @@ class FileTreeTile extends StatelessWidget {
           ),
           childWhenDragging: Opacity(opacity: 0.5, child: content),
           child: target
-              ? FileTreeTile._dropHighlighted(child: content, theme: theme)
-              : content,
+              ? FileTreeTile._dropHighlighted(
+                  child: visibleContent,
+                  theme: theme,
+                )
+              : visibleContent,
         );
       },
     );
@@ -180,9 +205,65 @@ class FileTreeTile extends StatelessWidget {
     return true;
   }
 
+  List<InlineSpan> _nameSpans(EditorThemeData theme) {
+    final query = highlightQuery?.trim() ?? '';
+    final baseStyle = TextStyle(
+      color: theme.sideBarForeground,
+      fontSize: 12.5,
+      fontStyle: isCut ? FontStyle.italic : FontStyle.normal,
+    );
+    if (query.isEmpty) return [TextSpan(text: item.name, style: baseStyle)];
+
+    final lowerName = item.name.toLowerCase();
+    final lowerQuery = query.toLowerCase();
+    final spans = <InlineSpan>[];
+    var offset = 0;
+    while (true) {
+      final match = lowerName.indexOf(lowerQuery, offset);
+      if (match < 0) break;
+      if (match > offset) {
+        spans.add(
+          TextSpan(text: item.name.substring(offset, match), style: baseStyle),
+        );
+      }
+      spans.add(
+        TextSpan(
+          text: item.name.substring(match, match + query.length),
+          style: baseStyle.copyWith(
+            backgroundColor: theme.accentColor.withValues(alpha: 0.3),
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      );
+      offset = match + query.length;
+    }
+    if (offset == 0) return [TextSpan(text: item.name, style: baseStyle)];
+    if (offset < item.name.length) {
+      spans.add(TextSpan(text: item.name.substring(offset), style: baseStyle));
+    }
+    return spans;
+  }
+
   static Widget _dropHighlighted({
     required Widget child,
     required EditorThemeData theme,
   }) =>
       ColoredBox(color: theme.accentColor.withValues(alpha: 0.2), child: child);
+
+  static Color _gitStatusColor(String status) => switch (status) {
+    'M' => Colors.orangeAccent,
+    'A' || 'U' => Colors.greenAccent,
+    'D' => Colors.redAccent,
+    'R' => Colors.lightBlueAccent,
+    _ => Colors.grey,
+  };
+
+  static String _gitStatusDescription(String status) => switch (status) {
+    'M' => 'Modified in Git',
+    'A' => 'Added to Git',
+    'D' => 'Deleted in Git',
+    'R' => 'Renamed in Git',
+    'U' => 'Untracked in Git',
+    _ => status,
+  };
 }
