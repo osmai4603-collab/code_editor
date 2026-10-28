@@ -13,7 +13,8 @@ class DiagnosticsScope extends InheritedNotifier<DiagnosticsService> {
   });
 
   static DiagnosticsService of(BuildContext context) {
-    final scope = context.dependOnInheritedWidgetOfExactType<DiagnosticsScope>();
+    final scope = context
+        .dependOnInheritedWidgetOfExactType<DiagnosticsScope>();
     assert(scope != null, 'DiagnosticsScope not found in context');
     return scope!.notifier!;
   }
@@ -59,7 +60,8 @@ class LspRegistryScope extends InheritedWidget {
   });
 
   static LspServerRegistry of(BuildContext context) {
-    final scope = context.dependOnInheritedWidgetOfExactType<LspRegistryScope>();
+    final scope = context
+        .dependOnInheritedWidgetOfExactType<LspRegistryScope>();
     assert(scope != null, 'LspRegistryScope not found in context');
     return scope!.registry;
   }

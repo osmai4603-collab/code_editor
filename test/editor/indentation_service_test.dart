@@ -182,6 +182,36 @@ void main() {
       },
     );
 
+    test('reports typed trigger characters without reporting deletions', () {
+      final typedCharacters = <String>[];
+      final formatter = EditorInputFormatter(
+        options: const EditorIndentationOptions(),
+        languageId: 'plaintext',
+        onCharacterTyped: typedCharacters.add,
+      );
+      const oldValue = TextEditingValue(
+        text: 'value',
+        selection: TextSelection.collapsed(offset: 5),
+      );
+
+      formatter.formatEditUpdate(
+        oldValue,
+        const TextEditingValue(
+          text: 'value:',
+          selection: TextSelection.collapsed(offset: 6),
+        ),
+      );
+      formatter.formatEditUpdate(
+        oldValue,
+        const TextEditingValue(
+          text: 'valu',
+          selection: TextSelection.collapsed(offset: 4),
+        ),
+      );
+
+      expect(typedCharacters, [':']);
+    });
+
     test(
       'Enter copies existing indentation without inventing file-start indent',
       () {

@@ -5,10 +5,7 @@ import '../../lsp/protocol/lsp_types.dart';
 class TextEditApplier {
   const TextEditApplier();
 
-  TextEditingValue apply(
-    TextEditingValue current,
-    List<TextEdit> edits,
-  ) {
+  TextEditingValue apply(TextEditingValue current, List<TextEdit> edits) {
     final resolved = edits.map((edit) {
       final start = _offsetAt(current.text, edit.range.start);
       final end = _offsetAt(current.text, edit.range.end);
@@ -23,8 +20,7 @@ class TextEditApplier {
       final next = resolved[index];
       if (next.start < previous.end ||
           (next.start == previous.start &&
-              (previous.start == previous.end ||
-                  next.start == next.end))) {
+              (previous.start == previous.end || next.start == next.end))) {
         throw FormatException('Text edits contain overlapping ranges');
       }
     }

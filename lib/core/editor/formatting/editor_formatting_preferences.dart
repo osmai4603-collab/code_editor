@@ -103,9 +103,9 @@ class InMemoryEditorFormattingPreferencesStore
   EditorFormattingPreferences _preferences;
 
   InMemoryEditorFormattingPreferencesStore({
-    EditorFormattingPreferences preferences =
+    EditorFormattingPreferences initialPreferences =
         const EditorFormattingPreferences(),
-  }) : _preferences = preferences;
+  }) : _preferences = initialPreferences;
 
   @override
   Future<EditorFormattingPreferences> read() async => _preferences;
@@ -126,8 +126,8 @@ class EditorFormattingPreferencesController extends ChangeNotifier {
   bool _isDisposed = false;
 
   EditorFormattingPreferencesController({
-    required EditorFormattingPreferencesStore store,
-  }) : _store = store;
+    required EditorFormattingPreferencesStore preferencesStore,
+  }) : _store = preferencesStore;
 
   EditorFormattingPreferences get preferences => _preferences;
 

@@ -1,6 +1,7 @@
 import 'package:code_editor/core/execution/execution_controller.dart';
 import 'package:code_editor/core/lsp/diagnostics/diagnostics_service.dart';
 import 'package:code_editor/core/lsp/protocol/lsp_types.dart';
+import 'package:code_editor/core/output/output_service.dart';
 import 'package:code_editor/core/terminal/services/terminal_scope.dart';
 import 'package:code_editor/core/terminal/services/terminal_service.dart';
 import 'package:code_editor/core/theme/editor_theme.dart';
@@ -17,6 +18,7 @@ void main() {
   late EditorDocumentsController documents;
   late DiagnosticsService diagnostics;
   late ExecutionController execution;
+  late OutputService output;
   late TerminalService terminal;
 
   setUp(() {
@@ -24,6 +26,7 @@ void main() {
     documents = EditorDocumentsController();
     diagnostics = DiagnosticsService();
     execution = ExecutionController();
+    output = OutputService(execution);
     terminal = TerminalService();
   });
 
@@ -31,6 +34,7 @@ void main() {
     layout.dispose();
     documents.dispose();
     diagnostics.dispose();
+    output.dispose();
     execution.dispose();
     terminal.dispose();
   });
@@ -46,9 +50,12 @@ void main() {
             notifier: diagnostics,
             child: ExecutionScope(
               notifier: execution,
-              child: TerminalScope(
-                notifier: terminal,
-                child: const Scaffold(body: PanelWidget()),
+              child: OutputScope(
+                notifier: output,
+                child: TerminalScope(
+                  notifier: terminal,
+                  child: const Scaffold(body: PanelWidget()),
+                ),
               ),
             ),
           ),

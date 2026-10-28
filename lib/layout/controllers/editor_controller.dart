@@ -8,6 +8,7 @@ import '../../models/editor_tab_item.dart';
 /// وحدة التحكم بإدارة التبويبات والمستندات المفتوحة في المحرر
 class EditorDocumentsController extends ChangeNotifier {
   final List<EditorTabItem> _tabs = [];
+  final Map<String, Future<void> Function()> _beforeSaveHooks = {};
   int _activeTabIndex = -1;
   EditorNavigationRequest? _navigationRequest;
   int _nextNavigationRequestId = 0;
@@ -47,6 +48,7 @@ class EditorDocumentsController extends ChangeNotifier {
           (tab) => tab.isPreview && !tab.isDirty,
         );
         if (previewIndex != -1) {
+          _beforeSaveHooks.remove(_tabs[previewIndex].id);
           _tabs.removeAt(previewIndex);
           if (_activeTabIndex > previewIndex) _activeTabIndex--;
         }
@@ -97,6 +99,7 @@ class EditorDocumentsController extends ChangeNotifier {
   void closeTab(String id) {
     final index = _tabs.indexWhere((t) => t.id == id);
     if (index != -1) {
+      _beforeSaveHooks.remove(id);
       _tabs.removeAt(index);
       if (_tabs.isEmpty) {
         _activeTabIndex = -1;
@@ -124,13 +127,27 @@ class EditorDocumentsController extends ChangeNotifier {
     notifyListeners();
   }
 
+  void setBeforeSaveHook(String id, Future<void> Function() hook) {
+    if (_tabs.any((tab) => tab.id == id)) {
+      _beforeSaveHooks[id] = hook;
+    }
+  }
+
+  void clearBeforeSaveHook(String id) {
+    _beforeSaveHooks.remove(id);
+  }
+
   Future<void> saveCurrentTab() async {
     final tab = activeTab;
     if (tab != null) await saveTab(tab.id);
   }
 
   Future<void> saveTab(String id) async {
-    final index = _tabs.indexWhere((tab) => tab.id == id);
+    var index = _tabs.indexWhere((tab) => tab.id == id);
+    if (index == -1) return;
+    if (!_tabs[index].isDirty) return;
+    await _beforeSaveHooks[id]?.call();
+    index = _tabs.indexWhere((tab) => tab.id == id);
     if (index == -1) return;
     final tab = _tabs[index];
     if (!tab.isDirty) return;
@@ -159,6 +176,16 @@ class EditorDocumentsController extends ChangeNotifier {
 
   void closePaths(List<String> paths) {
     final before = _tabs.length;
+    final removedIds = _tabs
+        .where(
+          (tab) => paths.any(
+            (path) =>
+                tab.path == path ||
+                tab.path.startsWith('$path${Platform.pathSeparator}'),
+          ),
+        )
+        .map((tab) => tab.id)
+        .toList();
     final activeId = activeTab?.id;
     final activeIndexBefore = _activeTabIndex;
     _tabs.removeWhere(
@@ -169,6 +196,9 @@ class EditorDocumentsController extends ChangeNotifier {
       ),
     );
     if (_tabs.length == before) return;
+    for (final id in removedIds) {
+      _beforeSaveHooks.remove(id);
+    }
     if (_tabs.isEmpty) {
       _activeTabIndex = -1;
     } else {

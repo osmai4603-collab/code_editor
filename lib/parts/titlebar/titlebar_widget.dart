@@ -89,6 +89,7 @@ class TitleBarWidget extends StatelessWidget {
           // أزرار التحكم بالنوافذ والتخطيط (Layout Controls)
           Row(
             children: [
+              if (appTheme != null) _buildThemePicker(context, appTheme),
               _buildIconButton(
                 icon: Icons.dock_rounded,
                 tooltip: 'Toggle Primary SideBar',
@@ -166,7 +167,7 @@ class TitleBarWidget extends StatelessWidget {
         child: Icon(
           Icons.color_lens_outlined,
           size: 17,
-          color: theme.titleBarForeground,
+          color: appTheme.theme.editorTheme.titleBarForeground,
         ),
       ),
     );

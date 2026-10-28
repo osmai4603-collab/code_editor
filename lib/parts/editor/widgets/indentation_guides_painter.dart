@@ -55,7 +55,7 @@ class IndentationGuidesPainter extends CustomPainter {
     final lineHeight = lineMetricsPainter.preferredLineHeight;
     final paint = Paint()
       ..color = color
-      ..strokeWidth = 1;
+      ..strokeWidth = 0.60;
     final firstVisibleLine = (verticalOffset / lineHeight)
         .floor()
         .clamp(0, indentationColumns.length)
@@ -75,7 +75,7 @@ class IndentationGuidesPainter extends CustomPainter {
         column < indentationColumns[lineIndex];
         column += options.indentSize
       ) {
-        final x = column * spaceWidth;
+        final x = column * spaceWidth + 2;
         if (x > size.width) break;
         canvas.drawLine(Offset(x, top), Offset(x, top + lineHeight), paint);
       }

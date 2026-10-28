@@ -7,6 +7,7 @@ import 'package:code_editor/core/execution/execution_controller.dart';
 import 'package:code_editor/core/lsp/client/lsp_client.dart';
 import 'package:code_editor/core/lsp/connection/lsp_channel.dart';
 import 'package:code_editor/core/lsp/diagnostics/diagnostics_service.dart';
+import 'package:code_editor/core/lsp/protocol/lsp_types.dart';
 import 'package:code_editor/core/lsp/registry/lsp_server_registry.dart';
 import 'package:code_editor/models/editor_tab_item.dart';
 import 'package:code_editor/parts/editor/controllers/editor_lsp_extension.dart';

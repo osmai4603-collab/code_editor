@@ -1,4 +1,5 @@
 import 'package:code_editor/core/execution/execution_controller.dart';
+import 'package:code_editor/core/output/output_service.dart';
 import 'package:code_editor/core/theme/editor_theme.dart';
 import 'package:code_editor/layout/controllers/editor_controller.dart';
 import 'package:code_editor/parts/panel/views/execution_output_view.dart';
@@ -7,14 +8,17 @@ import 'package:flutter_test/flutter_test.dart';
 
 void main() {
   late ExecutionController execution;
+  late OutputService output;
   late EditorDocumentsController documents;
 
   setUp(() {
     execution = ExecutionController();
+    output = OutputService(execution);
     documents = EditorDocumentsController();
   });
 
   tearDown(() {
+    output.dispose();
     execution.dispose();
     documents.dispose();
   });
@@ -24,9 +28,7 @@ void main() {
       theme: EditorThemeData.darkModern,
       child: EditorDocumentsScope(
         notifier: documents,
-        child: Scaffold(
-          body: ExecutionOutputView(executionController: execution),
-        ),
+        child: Scaffold(body: ExecutionOutputView(outputService: output)),
       ),
     ),
   );

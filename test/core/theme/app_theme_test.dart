@@ -33,6 +33,9 @@ void main() {
             theme: selectedTheme.materialTheme,
             home: AppTheme(
               theme: selectedTheme,
+              onThemeChanged: (theme) async {
+                selectedTheme = theme;
+              },
               child: EditorTheme(
                 theme: selectedTheme.editorTheme,
                 child: Builder(

@@ -845,17 +845,23 @@ class _CodeEditorSurfaceState extends State<_CodeEditorSurface> {
       }
       return;
     }
+  }
 
+  void _handleCharacterTyped(String character) {
     final extension = _lspExtension;
-    final insertedText = change.insertedText;
-    if (change.removedLength == 0 &&
-        insertedText.length == 1 &&
-        _formattingPreferencesController.preferences.formatOnType &&
-        extension?.formatOnTypeTriggers.contains(insertedText) == true) {
+    if (_pastePending || extension == null) return;
+    scheduleMicrotask(() {
+      if (!mounted ||
+          _pastePending ||
+          !_formattingPreferencesController.preferences.formatOnType ||
+          !identical(_lspExtension, extension) ||
+          !extension.formatOnTypeTriggers.contains(character)) {
+        return;
+      }
       unawaited(
-        _formatOnType(insertedText, change.start + insertedText.length),
+        _formatOnType(character, _textController.selection.extentOffset),
       );
-    }
+    });
   }
 
   void _markPastePending() {
@@ -1121,43 +1127,67 @@ class _CodeEditorSurfaceState extends State<_CodeEditorSurface> {
                 itemBuilder: (context) => [
                   PopupMenuItem(
                     value: 'formatDocument',
-                    child: Text('Format Document'),
                     enabled: _lspExtension?.canFormatDocument == true,
+                    child: Text('Format Document'),
                   ),
                   PopupMenuItem(
                     value: 'formatSelection',
-                    child: Text('Format Selection'),
                     enabled: _lspExtension?.canFormatRange == true,
+                    child: Text('Format Selection'),
                   ),
                   const PopupMenuDivider(),
                   PopupMenuItem<String>(
                     value: 'formatOnSave',
                     enabled: _lspExtension?.canFormatDocument == true,
-                    child: _FormattingPreferenceMenuItem(
-                      checked: _formattingPreferencesController
-                          .preferences
-                          .formatOnSave,
-                      label: 'Format on Save',
+                    child: Row(
+                      children: [
+                        Icon(
+                          _formattingPreferencesController
+                                  .preferences
+                                  .formatOnSave
+                              ? Icons.check_box
+                              : Icons.check_box_outline_blank,
+                          size: 18,
+                        ),
+                        const SizedBox(width: 8),
+                        const Text('Format on Save'),
+                      ],
                     ),
                   ),
                   PopupMenuItem<String>(
                     value: 'formatOnType',
                     enabled: _lspExtension?.canFormatOnType == true,
-                    child: _FormattingPreferenceMenuItem(
-                      checked: _formattingPreferencesController
-                          .preferences
-                          .formatOnType,
-                      label: 'Format on Type',
+                    child: Row(
+                      children: [
+                        Icon(
+                          _formattingPreferencesController
+                                  .preferences
+                                  .formatOnType
+                              ? Icons.check_box
+                              : Icons.check_box_outline_blank,
+                          size: 18,
+                        ),
+                        const SizedBox(width: 8),
+                        const Text('Format on Type'),
+                      ],
                     ),
                   ),
                   PopupMenuItem<String>(
                     value: 'formatOnPaste',
                     enabled: _lspExtension?.canFormatRange == true,
-                    child: _FormattingPreferenceMenuItem(
-                      checked: _formattingPreferencesController
-                          .preferences
-                          .formatOnPaste,
-                      label: 'Format on Paste',
+                    child: Row(
+                      children: [
+                        Icon(
+                          _formattingPreferencesController
+                                  .preferences
+                                  .formatOnPaste
+                              ? Icons.check_box
+                              : Icons.check_box_outline_blank,
+                          size: 18,
+                        ),
+                        const SizedBox(width: 8),
+                        const Text('Format on Paste'),
+                      ],
                     ),
                   ),
                   const PopupMenuDivider(),
@@ -1400,6 +1430,8 @@ class _CodeEditorSurfaceState extends State<_CodeEditorSurface> {
                                                             languageId: widget
                                                                 .tabItem
                                                                 .languageId,
+                                                            onCharacterTyped:
+                                                                _handleCharacterTyped,
                                                           ),
                                                         ],
                                                         scrollController:

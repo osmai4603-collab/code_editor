@@ -35,17 +35,17 @@ class ProcessRunner {
           .transform(utf8.decoder)
           .transform(const LineSplitter())
           .forEach((line) {
-        session.addLine(line, OutputLineType.stdout);
-        onOutput?.call();
-      });
+            session.addLine(line, OutputLineType.stdout);
+            onOutput?.call();
+          });
 
       final stderrDone = process.stderr
           .transform(utf8.decoder)
           .transform(const LineSplitter())
           .forEach((line) {
-        session.addLine(line, OutputLineType.stderr);
-        onOutput?.call();
-      });
+            session.addLine(line, OutputLineType.stderr);
+            onOutput?.call();
+          });
 
       final exitCode = await process.exitCode;
       await Future.wait([stdoutDone, stderrDone]);

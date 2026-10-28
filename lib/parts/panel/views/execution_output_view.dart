@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
 
-import '../../../core/execution/execution_controller.dart';
 import '../../../core/execution/execution_session.dart';
+import '../../../core/output/output_service.dart';
 import '../../../core/theme/editor_theme.dart';
 import '../../../layout/controllers/editor_controller.dart';
 import '../../../models/editor_tab_item.dart';
 
 class ExecutionOutputView extends StatefulWidget {
-  final ExecutionController executionController;
+  final OutputService outputService;
 
-  const ExecutionOutputView({super.key, required this.executionController});
+  const ExecutionOutputView({super.key, required this.outputService});
 
   @override
   State<ExecutionOutputView> createState() => _ExecutionOutputViewState();
@@ -18,46 +18,42 @@ class ExecutionOutputView extends StatefulWidget {
 class _ExecutionOutputViewState extends State<ExecutionOutputView> {
   final ScrollController _scrollController = ScrollController();
   final TextEditingController _searchController = TextEditingController();
-  String? _selectedSessionId;
-  String? _lastActiveSessionId;
+  String? _lastSelectedChannelId;
   bool _shouldFollowOutput = true;
 
   @override
   void initState() {
     super.initState();
-    _lastActiveSessionId = widget.executionController.activeSession?.id;
-    _selectedSessionId = _lastActiveSessionId;
-    widget.executionController.addListener(_handleControllerChanged);
+    _lastSelectedChannelId = widget.outputService.selectedChannel?.id;
+    widget.outputService.addListener(_handleOutputChanged);
     _scrollController.addListener(_handleScrollChanged);
   }
 
   @override
   void didUpdateWidget(covariant ExecutionOutputView oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.executionController != widget.executionController) {
-      oldWidget.executionController.removeListener(_handleControllerChanged);
-      widget.executionController.addListener(_handleControllerChanged);
-      _lastActiveSessionId = widget.executionController.activeSession?.id;
-      _selectedSessionId = _lastActiveSessionId;
+    if (oldWidget.outputService != widget.outputService) {
+      oldWidget.outputService.removeListener(_handleOutputChanged);
+      widget.outputService.addListener(_handleOutputChanged);
+      _lastSelectedChannelId = widget.outputService.selectedChannel?.id;
+      _shouldFollowOutput = true;
     }
   }
 
   @override
   void dispose() {
-    widget.executionController.removeListener(_handleControllerChanged);
+    widget.outputService.removeListener(_handleOutputChanged);
     _scrollController.removeListener(_handleScrollChanged);
     _scrollController.dispose();
     _searchController.dispose();
     super.dispose();
   }
 
-  void _handleControllerChanged() {
-    final activeId = widget.executionController.activeSession?.id;
-    if (activeId != _lastActiveSessionId) {
-      _lastActiveSessionId = activeId;
-      _selectedSessionId = activeId;
+  void _handleOutputChanged() {
+    final selectedId = widget.outputService.selectedChannel?.id;
+    if (selectedId != _lastSelectedChannelId) {
+      _lastSelectedChannelId = selectedId;
       _shouldFollowOutput = true;
-      if (mounted) setState(() {});
     }
     if (_shouldFollowOutput) _scrollToBottom();
   }
@@ -84,11 +80,12 @@ class _ExecutionOutputViewState extends State<ExecutionOutputView> {
     final activeTab = documentsController.activeTab;
 
     return ListenableBuilder(
-      listenable: widget.executionController,
+      listenable: widget.outputService,
       builder: (context, _) {
-        final history = widget.executionController.history;
-        final selectedSession = _sessionFor(history);
-        final isRunning = widget.executionController.isRunning;
+        final channels = widget.outputService.channels;
+        final selectedChannel = widget.outputService.selectedChannel;
+        final selectedSession = selectedChannel?.session;
+        final isRunning = widget.outputService.executionController.isRunning;
         final query = _searchController.text.trim().toLowerCase();
         final lines =
             selectedSession?.lines
@@ -103,7 +100,8 @@ class _ExecutionOutputViewState extends State<ExecutionOutputView> {
           children: [
             _buildToolbar(
               theme,
-              history,
+              channels,
+              selectedChannel,
               selectedSession,
               activeTab,
               isRunning,
@@ -169,7 +167,8 @@ class _ExecutionOutputViewState extends State<ExecutionOutputView> {
 
   Widget _buildToolbar(
     EditorThemeData theme,
-    List<ExecutionSession> history,
+    List<OutputChannel> channels,
+    OutputChannel? selectedChannel,
     ExecutionSession? selectedSession,
     EditorTabItem? activeTab,
     bool isRunning,
@@ -198,24 +197,24 @@ class _ExecutionOutputViewState extends State<ExecutionOutputView> {
               ),
             ),
           ),
-          if (history.isNotEmpty)
+          if (channels.isNotEmpty)
             SizedBox(
               width: 170,
               height: 30,
               child: DropdownButtonHideUnderline(
                 child: DropdownButton<String>(
-                  value: selectedSession?.id,
+                  value: selectedChannel?.id,
                   isDense: true,
                   isExpanded: true,
                   dropdownColor: theme.panelBackground,
                   style: TextStyle(color: theme.panelForeground, fontSize: 11),
                   hint: const Text('Select execution'),
-                  items: history.reversed
+                  items: channels.reversed
                       .map(
-                        (session) => DropdownMenuItem(
-                          value: session.id,
+                        (channel) => DropdownMenuItem(
+                          value: channel.id,
                           child: Text(
-                            _sessionTitle(session),
+                            channel.title,
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
@@ -223,10 +222,8 @@ class _ExecutionOutputViewState extends State<ExecutionOutputView> {
                       .toList(),
                   onChanged: (id) {
                     if (id == null) return;
-                    setState(() {
-                      _selectedSessionId = id;
-                      _shouldFollowOutput = true;
-                    });
+                    widget.outputService.selectChannel(id);
+                    _shouldFollowOutput = true;
                     _scrollToBottom();
                   },
                 ),
@@ -294,7 +291,9 @@ class _ExecutionOutputViewState extends State<ExecutionOutputView> {
                 ? 'Open a file before running'
                 : 'Run ${activeTab.title}',
             onPressed: activeTab != null && !isRunning
-                ? () => widget.executionController.runFile(activeTab.path)
+                ? () => widget.outputService.executionController.runFile(
+                    activeTab.path,
+                  )
                 : null,
           ),
           _buildToolbarButton(
@@ -302,7 +301,7 @@ class _ExecutionOutputViewState extends State<ExecutionOutputView> {
             color: theme.diagnosticError,
             tooltip: 'Stop execution',
             onPressed: isRunning
-                ? widget.executionController.stopExecution
+                ? widget.outputService.executionController.stopExecution
                 : null,
           ),
           _buildToolbarButton(
@@ -311,9 +310,7 @@ class _ExecutionOutputViewState extends State<ExecutionOutputView> {
             tooltip: 'Clear selected output',
             onPressed:
                 selectedSession != null && selectedSession.lines.isNotEmpty
-                ? () => widget.executionController.clearOutput(
-                    session: selectedSession,
-                  )
+                ? () => widget.outputService.clearChannel(selectedChannel!.id)
                 : null,
           ),
         ],
@@ -384,25 +381,6 @@ class _ExecutionOutputViewState extends State<ExecutionOutputView> {
         ),
       ),
     );
-  }
-
-  ExecutionSession? _sessionFor(List<ExecutionSession> history) {
-    final selectedId = _selectedSessionId;
-    if (selectedId != null) {
-      for (final session in history) {
-        if (session.id == selectedId) return session;
-      }
-    }
-    return widget.executionController.activeSession;
-  }
-
-  String _sessionTitle(ExecutionSession session) {
-    final path = session.args.isEmpty ? session.command : session.args.last;
-    final name = path.split(RegExp(r'[/\\]')).last;
-    final started = session.startTime;
-    final time =
-        '${started.hour.toString().padLeft(2, '0')}:${started.minute.toString().padLeft(2, '0')}:${started.second.toString().padLeft(2, '0')}';
-    return '$name · $time';
   }
 
   String _statusLabel(ExecutionSession? session, bool isRunning) {

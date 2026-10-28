@@ -57,7 +57,11 @@ class OutputService extends ChangeNotifier {
 
   void selectChannel(String channelId) {
     if (!channels.any((channel) => channel.id == channelId)) {
-      throw ArgumentError.value(channelId, 'channelId', 'Unknown output channel');
+      throw ArgumentError.value(
+        channelId,
+        'channelId',
+        'Unknown output channel',
+      );
     }
     if (_selectedChannelId == channelId) return;
     _selectedChannelId = channelId;
@@ -73,7 +77,11 @@ class OutputService extends ChangeNotifier {
       }
     }
     if (target == null) {
-      throw ArgumentError.value(channelId, 'channelId', 'Unknown output channel');
+      throw ArgumentError.value(
+        channelId,
+        'channelId',
+        'Unknown output channel',
+      );
     }
     executionController.clearOutput(session: target.session);
   }

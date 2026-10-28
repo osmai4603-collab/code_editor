@@ -8,6 +8,7 @@ class EditorInputFormatter extends TextInputFormatter {
   final String languageId;
   final bool autoIndent;
   final bool autoClosingPairs;
+  final void Function(String character)? onCharacterTyped;
   final IndentationService _indentationService;
 
   EditorInputFormatter({
@@ -15,6 +16,7 @@ class EditorInputFormatter extends TextInputFormatter {
     required this.languageId,
     this.autoIndent = true,
     this.autoClosingPairs = true,
+    this.onCharacterTyped,
     this._indentationService = const IndentationService(),
   });
 
@@ -33,6 +35,12 @@ class EditorInputFormatter extends TextInputFormatter {
     final change = _singleChange(oldValue, newValue);
     if (change == null) return newValue;
     final inserted = change.insertedText;
+    if (oldSelection.isCollapsed &&
+        change.removedLength == 0 &&
+        inserted.length == 1 &&
+        inserted != '\n') {
+      onCharacterTyped?.call(inserted);
+    }
 
     if (inserted == '\n' && autoIndent) {
       return _insertNewline(oldValue, oldSelection);
@@ -340,7 +348,10 @@ class EditorInputFormatter extends TextInputFormatter {
         newText.length == oldText.length + 1 &&
         newText.startsWith(oldText.substring(0, cursor)) &&
         newText.endsWith(oldText.substring(cursor))) {
-      return _TextChange(newText.substring(cursor, cursor + 1));
+      return _TextChange(
+        insertedText: newText.substring(cursor, cursor + 1),
+        removedLength: 0,
+      );
     }
 
     var prefix = 0;
@@ -358,12 +369,16 @@ class EditorInputFormatter extends TextInputFormatter {
       oldEnd--;
       newEnd--;
     }
-    return _TextChange(newText.substring(prefix, newEnd));
+    return _TextChange(
+      insertedText: newText.substring(prefix, newEnd),
+      removedLength: oldEnd - prefix,
+    );
   }
 }
 
 class _TextChange {
   final String insertedText;
+  final int removedLength;
 
-  const _TextChange(this.insertedText);
+  const _TextChange({required this.insertedText, required this.removedLength});
 }

@@ -17,7 +17,7 @@ void main() {
     );
 
     expect(change?.start, 6);
-    expect(change?.removedLength, 3);
+    expect(change?.removedLength, 5);
     expect(change?.insertedText, '\nnew\n');
   });
 

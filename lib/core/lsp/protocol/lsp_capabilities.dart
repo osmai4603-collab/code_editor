@@ -116,7 +116,7 @@ class LspServerCapabilities {
         hasDocumentFormatting: false,
         hasDocumentRangeFormatting: false,
         hasDocumentOnTypeFormatting: false,
-        documentOnTypeFormattingTriggers: const [],
+        documentOnTypeFormattingTriggers: [],
         raw: {},
       );
     }

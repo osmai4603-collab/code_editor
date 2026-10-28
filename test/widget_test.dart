@@ -12,6 +12,8 @@ import 'package:code_editor/parts/statusbar/statusbar_widget.dart';
 import 'package:code_editor/parts/sidebar/explorer/explorer_view.dart';
 import 'package:code_editor/core/statusbar/status_bar_preferences_store.dart';
 import 'package:code_editor/core/editor/formatting/editor_formatting_preferences.dart';
+import 'package:code_editor/core/theme/app_theme.dart';
+import 'package:code_editor/core/theme/theme_preferences_store.dart';
 
 void main() {
   testWidgets('CodeEditor Workbench Scaffold smoke test', (
@@ -27,6 +29,7 @@ void main() {
         autoStartLsp: false,
         statusBarPreferencesStore: InMemoryStatusBarPreferencesStore(),
         formattingPreferencesStore: InMemoryEditorFormattingPreferencesStore(),
+        themePreferencesStore: InMemoryThemePreferencesStore(),
       ),
     );
     await tester.pumpAndSettle();
@@ -59,6 +62,7 @@ void main() {
         autoStartLsp: false,
         statusBarPreferencesStore: InMemoryStatusBarPreferencesStore(),
         formattingPreferencesStore: InMemoryEditorFormattingPreferencesStore(),
+        themePreferencesStore: InMemoryThemePreferencesStore(),
       ),
     );
     await tester.pumpAndSettle();
@@ -79,6 +83,7 @@ void main() {
         autoStartLsp: false,
         statusBarPreferencesStore: InMemoryStatusBarPreferencesStore(),
         formattingPreferencesStore: InMemoryEditorFormattingPreferencesStore(),
+        themePreferencesStore: InMemoryThemePreferencesStore(),
       ),
     );
     await tester.pumpAndSettle();
@@ -88,5 +93,47 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('theme selection updates and persists across app restart', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+
+    final themeStore = InMemoryThemePreferencesStore(themeId: 'light-modern');
+
+    CodeEditorApp createApp() => CodeEditorApp(
+      autoStartLsp: false,
+      statusBarPreferencesStore: InMemoryStatusBarPreferencesStore(),
+      formattingPreferencesStore: InMemoryEditorFormattingPreferencesStore(),
+      themePreferencesStore: themeStore,
+    );
+
+    await tester.pumpWidget(createApp());
+    await tester.pumpAndSettle();
+
+    var titleBarContext = tester.element(find.byType(TitleBarWidget));
+    expect(AppTheme.of(titleBarContext).id, 'light-modern');
+    expect(Theme.of(titleBarContext).brightness, Brightness.light);
+
+    await tester.tap(find.byTooltip('Color Theme: Light Modern'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Dark Modern').last);
+    await tester.pumpAndSettle();
+
+    titleBarContext = tester.element(find.byType(TitleBarWidget));
+    expect(AppTheme.of(titleBarContext).id, 'dark-modern');
+    expect(Theme.of(titleBarContext).brightness, Brightness.dark);
+    expect(await themeStore.readThemeId(), 'dark-modern');
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+    await tester.pumpWidget(createApp());
+    await tester.pumpAndSettle();
+
+    titleBarContext = tester.element(find.byType(TitleBarWidget));
+    expect(AppTheme.of(titleBarContext).id, 'dark-modern');
   });
 }

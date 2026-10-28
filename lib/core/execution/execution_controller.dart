@@ -77,7 +77,7 @@ class ExecutionController extends ChangeNotifier {
 
   /// مسح سجل المخرجات الحالي
   void clearOutput({ExecutionSession? session}) {
-    (session ?? _activeSession)?.lines.clear();
+    (session ?? _activeSession)?.clearLines();
     notifyListeners();
   }
 

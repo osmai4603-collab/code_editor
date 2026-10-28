@@ -1,3 +1,5 @@
+import 'dart:collection';
+
 /// نوع سطر مخرجات التنفيذ
 enum OutputLineType { stdout, stderr, systemInfo }
 
@@ -29,7 +31,11 @@ class ExecutionSession {
   DateTime? endTime;
   ExecutionStatus status;
   int? exitCode;
-  final List<ExecutionOutputLine> lines = [];
+  final Queue<ExecutionOutputLine> _lines = Queue();
+  List<ExecutionOutputLine>? _lineSnapshot;
+
+  List<ExecutionOutputLine> get lines =>
+      _lineSnapshot ??= List.unmodifiable(_lines);
 
   ExecutionSession({
     required this.id,
@@ -40,12 +46,17 @@ class ExecutionSession {
        status = ExecutionStatus.running;
 
   void addLine(String text, OutputLineType type) {
-    lines.add(
+    _lines.addLast(
       ExecutionOutputLine(text: text, type: type, timestamp: DateTime.now()),
     );
-    if (lines.length > maxOutputLines) {
-      lines.removeRange(0, lines.length - maxOutputLines);
-    }
+    if (_lines.length > maxOutputLines) _lines.removeFirst();
+    _lineSnapshot = null;
+  }
+
+  void clearLines() {
+    if (_lines.isEmpty) return;
+    _lines.clear();
+    _lineSnapshot = null;
   }
 
   void finish(int code, {bool terminated = false}) {

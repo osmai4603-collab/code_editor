@@ -15,9 +15,13 @@ void main() {
 
   test('loads and persists preferences through the configured store', () async {
     final store = InMemoryEditorFormattingPreferencesStore(
-      preferences: const EditorFormattingPreferences(formatOnPaste: true),
+      initialPreferences: const EditorFormattingPreferences(
+        formatOnPaste: true,
+      ),
     );
-    final controller = EditorFormattingPreferencesController(store: store);
+    final controller = EditorFormattingPreferencesController(
+      preferencesStore: store,
+    );
     addTearDown(controller.dispose);
 
     await controller.initialize();

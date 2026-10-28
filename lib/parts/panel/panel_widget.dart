@@ -1,5 +1,6 @@
 import 'package:code_editor/core/execution/execution_controller.dart';
 import 'package:code_editor/core/lsp/diagnostics/diagnostics_service.dart';
+import 'package:code_editor/core/output/output_service.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/theme/editor_theme.dart';
