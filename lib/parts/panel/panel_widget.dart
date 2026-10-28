@@ -1,8 +1,7 @@
 import 'package:code_editor/core/execution/execution_controller.dart';
 import 'package:code_editor/core/lsp/diagnostics/diagnostics_service.dart';
-import 'package:code_editor/core/terminal/services/terminal_scope.dart';
-import 'package:code_editor/core/terminal/services/terminal_service.dart';
 import 'package:flutter/material.dart';
+
 import '../../core/theme/editor_theme.dart';
 import '../../layout/controllers/layout_controller.dart';
 import '../../layout/controllers/lsp_and_execution_scope.dart';
@@ -11,9 +10,15 @@ import 'views/execution_output_view.dart';
 import 'views/problems_view.dart';
 import 'views/terminal/terminal_panel_view.dart';
 
-/// اللوحة السفلية (Panel) وتشمل الطرفية وسجل المخرجات وقائمة الأخطاء
-class PanelWidget extends StatelessWidget {
+class PanelWidget extends StatefulWidget {
   const PanelWidget({super.key});
+
+  @override
+  State<PanelWidget> createState() => _PanelWidgetState();
+}
+
+class _PanelWidgetState extends State<PanelWidget> {
+  final Map<PanelTab, Widget> _panelBodies = {};
 
   @override
   Widget build(BuildContext context) {
@@ -22,24 +27,30 @@ class PanelWidget extends StatelessWidget {
     final layoutState = layoutController.state;
     final diagnosticsService = DiagnosticsScope.of(context);
     final executionController = ExecutionScope.of(context);
-    final terminalService = TerminalScope.of(context);
+
+    _panelBodies.putIfAbsent(
+      layoutState.activePanelTab,
+      () => _buildTabBody(
+        layoutState.activePanelTab,
+        diagnosticsService,
+        executionController,
+      ),
+    );
 
     return Container(
       decoration: BoxDecoration(
         color: theme.panelBackground,
-        border: Border(top: BorderSide(color: theme.panelBorder, width: 1.0)),
+        border: Border(top: BorderSide(color: theme.panelBorder, width: 1)),
       ),
       child: Column(
         children: [
-          // شريط عناوين تبويبات اللوحة السفلية
           Container(
-            height: 32,
-            padding: const EdgeInsets.symmetric(horizontal: 16),
+            height: 34,
+            padding: const EdgeInsetsDirectional.only(start: 8, end: 6),
             decoration: BoxDecoration(
               border: Border(
                 bottom: BorderSide(
                   color: theme.panelBorder.withValues(alpha: 0.5),
-                  width: 1.0,
                 ),
               ),
             ),
@@ -51,97 +62,56 @@ class PanelWidget extends StatelessWidget {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        _buildPanelTab(
-                          title: 'PROBLEMS',
-                          badge: '${diagnosticsService.totalProblems}',
-                          badgeColor: diagnosticsService.totalErrors > 0
-                              ? Colors.redAccent
-                              : (diagnosticsService.totalWarnings > 0
-                                    ? Colors.amberAccent
-                                    : null),
-                          isSelected:
-                              layoutState.activePanelTab == PanelTab.problems,
-                          theme: theme,
-                          onTap: () => layoutController.selectPanelTab(
-                            PanelTab.problems,
+                        for (final tab in PanelTab.values)
+                          _buildPanelTab(
+                            tab: tab,
+                            isSelected: layoutState.activePanelTab == tab,
+                            theme: theme,
+                            diagnosticsService: diagnosticsService,
+                            executionController: executionController,
+                            onTap: () => layoutController.selectPanelTab(tab),
                           ),
-                        ),
-                        _buildPanelTab(
-                          title: 'OUTPUT',
-                          badge: executionController.isRunning
-                              ? 'RUNNING'
-                              : null,
-                          badgeColor: executionController.isRunning
-                              ? Colors.greenAccent
-                              : null,
-                          isSelected:
-                              layoutState.activePanelTab == PanelTab.output,
-                          theme: theme,
-                          onTap: () =>
-                              layoutController.selectPanelTab(PanelTab.output),
-                        ),
-                        _buildPanelTab(
-                          title: 'TERMINAL',
-                          isSelected:
-                              layoutState.activePanelTab == PanelTab.terminal,
-                          theme: theme,
-                          onTap: () => layoutController.selectPanelTab(
-                            PanelTab.terminal,
-                          ),
-                        ),
-                        _buildPanelTab(
-                          title: 'DEBUG CONSOLE',
-                          isSelected:
-                              layoutState.activePanelTab ==
-                              PanelTab.debugConsole,
-                          theme: theme,
-                          onTap: () => layoutController.selectPanelTab(
-                            PanelTab.debugConsole,
-                          ),
-                        ),
                       ],
                     ),
                   ),
                 ),
-                // أزرار التحكم باللوحة
                 _buildActionIcon(
-                  Icons.add,
-                  'New Terminal',
-                  theme,
-                  () => _createTerminal(
-                    context,
-                    terminalService,
-                    layoutController,
-                  ),
-                ),
-                _buildActionIcon(
-                  layoutState.isPanelMaximized
+                  context,
+                  icon: layoutState.isPanelMaximized
                       ? Icons.fullscreen_exit_rounded
                       : Icons.fullscreen_rounded,
-                  layoutState.isPanelMaximized
+                  tooltip: layoutState.isPanelMaximized
                       ? 'Restore Panel Size'
                       : 'Maximize Panel Size',
-                  theme,
-                  layoutController.togglePanelMaximized,
+                  theme: theme,
+                  onPressed: layoutController.togglePanelMaximized,
                 ),
                 _buildActionIcon(
-                  Icons.close,
-                  'Close Panel',
-                  theme,
-                  layoutController.togglePanel,
+                  context,
+                  icon: Icons.close,
+                  tooltip: 'Close Panel',
+                  theme: theme,
+                  onPressed: layoutController.togglePanel,
                 ),
               ],
             ),
           ),
-
-          // محتوى اللوحة السفلية النشطة
           Expanded(
-            child: _buildTabBody(
-              layoutState.activePanelTab,
-              theme,
-              diagnosticsService,
-              executionController,
-              terminalService,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                for (final entry in _panelBodies.entries)
+                  Offstage(
+                    offstage: entry.key != layoutState.activePanelTab,
+                    child: TickerMode(
+                      enabled: entry.key == layoutState.activePanelTab,
+                      child: ExcludeFocus(
+                        excluding: entry.key != layoutState.activePanelTab,
+                        child: entry.value,
+                      ),
+                    ),
+                  ),
+              ],
             ),
           ),
         ],
@@ -150,61 +120,102 @@ class PanelWidget extends StatelessWidget {
   }
 
   Widget _buildPanelTab({
-    required String title,
-    String? badge,
-    Color? badgeColor,
+    required PanelTab tab,
     required bool isSelected,
     required EditorThemeData theme,
+    required DiagnosticsService diagnosticsService,
+    required ExecutionController executionController,
     required VoidCallback onTap,
   }) {
-    return InkWell(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8),
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          border: isSelected
-              ? Border(bottom: BorderSide(color: theme.accentColor, width: 2.0))
-              : null,
-        ),
-        child: Row(
-          children: [
-            Text(
-              title,
-              style: TextStyle(
-                color: isSelected
-                    ? theme.panelTitleActive
-                    : theme.panelTitleInactive,
-                fontSize: 11,
-                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-                letterSpacing: 0.5,
-              ),
+    final title = switch (tab) {
+      PanelTab.problems => 'PROBLEMS',
+      PanelTab.output => 'OUTPUT',
+      PanelTab.terminal => 'TERMINAL',
+      PanelTab.debugConsole => 'DEBUG CONSOLE',
+    };
+    final badge = switch (tab) {
+      PanelTab.problems when diagnosticsService.totalProblems > 0 =>
+        diagnosticsService.totalProblems.toString(),
+      PanelTab.output when executionController.isRunning => 'RUNNING',
+      _ => null,
+    };
+    final badgeColor = switch (tab) {
+      PanelTab.problems when diagnosticsService.totalErrors > 0 =>
+        theme.diagnosticError,
+      PanelTab.problems when diagnosticsService.totalWarnings > 0 =>
+        theme.diagnosticWarning,
+      PanelTab.problems when diagnosticsService.totalProblems > 0 =>
+        theme.diagnosticInformation,
+      PanelTab.output when executionController.isRunning => const Color(
+        0xFF23D18B,
+      ),
+      _ => null,
+    };
+
+    return Semantics(
+      button: true,
+      selected: isSelected,
+      label: badge == null ? title : '$title, $badge',
+      child: Tooltip(
+        message: title,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(3),
+          child: Container(
+            height: 34,
+            padding: const EdgeInsets.symmetric(horizontal: 9),
+            decoration: BoxDecoration(
+              border: isSelected
+                  ? Border(
+                      bottom: BorderSide(color: theme.accentColor, width: 2),
+                    )
+                  : null,
             ),
-            if (badge != null && badge != '0') ...[
-              const SizedBox(width: 4),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                decoration: BoxDecoration(
-                  color: badgeColor?.withValues(alpha: 0.25) ?? Colors.white12,
-                  borderRadius: BorderRadius.circular(8),
-                  border: badgeColor != null
-                      ? Border.all(
-                          color: badgeColor.withValues(alpha: 0.5),
-                          width: 0.8,
-                        )
-                      : null,
-                ),
-                child: Text(
-                  badge,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  title,
                   style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                    color: badgeColor ?? Colors.white70,
+                    color: isSelected
+                        ? theme.panelTitleActive
+                        : theme.panelTitleInactive,
+                    fontSize: 10.5,
+                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                    letterSpacing: 0.45,
                   ),
                 ),
-              ),
-            ],
-          ],
+                if (badge != null) ...[
+                  const SizedBox(width: 5),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 5,
+                      vertical: 1,
+                    ),
+                    decoration: BoxDecoration(
+                      color:
+                          badgeColor?.withValues(alpha: 0.18) ?? Colors.white12,
+                      borderRadius: BorderRadius.circular(8),
+                      border: badgeColor == null
+                          ? null
+                          : Border.all(
+                              color: badgeColor.withValues(alpha: 0.45),
+                              width: 0.7,
+                            ),
+                    ),
+                    child: Text(
+                      badge,
+                      style: TextStyle(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w600,
+                        color: badgeColor ?? theme.panelForeground,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -212,10 +223,8 @@ class PanelWidget extends StatelessWidget {
 
   Widget _buildTabBody(
     PanelTab tab,
-    EditorThemeData theme,
     DiagnosticsService diagnosticsService,
     ExecutionController executionController,
-    TerminalService terminalService,
   ) {
     switch (tab) {
       case PanelTab.terminal:
@@ -225,55 +234,72 @@ class PanelWidget extends StatelessWidget {
       case PanelTab.output:
         return ExecutionOutputView(executionController: executionController);
       case PanelTab.debugConsole:
-        return Center(
-          child: Text(
-            'Debug console is ready.',
-            style: TextStyle(
-              color: theme.panelForeground.withValues(alpha: 0.5),
-              fontSize: 13,
-            ),
-          ),
-        );
+        return const _DebugConsoleUnavailableView();
     }
   }
 
-  Future<void> _createTerminal(
-    BuildContext context,
-    TerminalService terminalService,
-    WorkbenchLayoutController layoutController,
-  ) async {
-    layoutController.selectPanelTab(PanelTab.terminal);
-    try {
-      await terminalService.createTerminal();
-    } catch (error) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not start terminal: $error')),
-        );
-      }
-    }
-  }
-}
-
-Widget _buildActionIcon(
-  IconData icon,
-  String tooltip,
-  EditorThemeData theme,
-  VoidCallback onPressed,
-) {
-  return Tooltip(
-    message: tooltip,
-    child: InkWell(
-      onTap: onPressed,
-      borderRadius: BorderRadius.circular(4),
-      child: Padding(
-        padding: const EdgeInsets.all(4.0),
-        child: Icon(
-          icon,
-          size: 14,
-          color: theme.panelForeground.withValues(alpha: 0.7),
-        ),
+  Widget _buildActionIcon(
+    BuildContext context, {
+    required IconData icon,
+    required String tooltip,
+    required EditorThemeData theme,
+    required VoidCallback onPressed,
+  }) => Semantics(
+    button: true,
+    label: tooltip,
+    child: Tooltip(
+      message: tooltip,
+      child: IconButton(
+        onPressed: onPressed,
+        tooltip: tooltip,
+        icon: Icon(icon, size: 16),
+        color: theme.panelForeground.withValues(alpha: 0.75),
+        visualDensity: VisualDensity.compact,
+        constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+        padding: const EdgeInsets.all(6),
       ),
     ),
   );
+}
+
+class _DebugConsoleUnavailableView extends StatelessWidget {
+  const _DebugConsoleUnavailableView();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = EditorTheme.of(context);
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.bug_report_outlined,
+              size: 32,
+              color: theme.panelForeground.withValues(alpha: 0.4),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              'No debug session is available.',
+              style: TextStyle(
+                color: theme.panelForeground,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 5),
+            Text(
+              'A Debug Adapter is not connected, so expression evaluation is unavailable.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: theme.panelForeground.withValues(alpha: 0.55),
+                fontSize: 11.5,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }

@@ -20,90 +20,92 @@ import 'layout/controllers/lsp_and_execution_scope.dart';
 import 'layout/widgets/workbench_scaffold.dart';
 
 void main() {
-  WidgetsFlutterBinding.ensureInitialized();
-  runApp(const CodeEditorApp());
+    WidgetsFlutterBinding.ensureInitialized();
+    runApp(const CodeEditorApp());
+  
 }
 
 class CodeEditorApp extends StatefulWidget {
-  final bool autoStartLsp;
-  final LspServerRegistry? lspRegistry;
-  final StatusBarPreferencesStore? statusBarPreferencesStore;
+    final bool autoStartLsp;
+    final LspServerRegistry? lspRegistry;
+    final StatusBarPreferencesStore? statusBarPreferencesStore;
+    
 
-  const CodeEditorApp({
+    const CodeEditorApp({
     super.key,
     this.autoStartLsp = true,
     this.lspRegistry,
     this.statusBarPreferencesStore,
-  });
+    });
 
-  @override
-  State<CodeEditorApp> createState() => _CodeEditorAppState();
+    @override
+    State<CodeEditorApp> createState() => _CodeEditorAppState();
 }
 
 class _CodeEditorAppState extends State<CodeEditorApp> {
-  late final WorkbenchLayoutController _layoutController;
-  late final EditorDocumentsController _documentsController;
-  late final DiagnosticsService _diagnosticsService;
-  late final ExecutionController _executionController;
-  late final TerminalService _terminalService;
-  late final StatusBarService _statusBarService;
-  late final EditorStatusController _editorStatusController;
-  late final LspServerRegistry _lspRegistry;
-  late final FileExplorerController _fileExplorerController;
-  late final Future<void> _statusBarInitialization;
-  final List<void Function()> _disposeStatusBarContributions = [];
-  bool _isDisposed = false;
+    late final WorkbenchLayoutController _layoutController;
+    late final EditorDocumentsController _documentsController;
+    late final DiagnosticsService _diagnosticsService;
+    late final ExecutionController _executionController;
+    late final TerminalService _terminalService;
+    late final StatusBarService _statusBarService;
+    late final EditorStatusController _editorStatusController;
+    late final LspServerRegistry _lspRegistry;
+    late final FileExplorerController _fileExplorerController;
+    late final Future<void> _statusBarInitialization;
+    final List<void Function()> _disposeStatusBarContributions = [];
+    bool _isDisposed = false;
 
-  @override
-  void initState() {
+    @override
+    void initState() {
     super.initState();
     _layoutController = WorkbenchLayoutController();
     _documentsController = EditorDocumentsController();
     _diagnosticsService = DiagnosticsService();
     _statusBarService = StatusBarService(
-      preferencesStore:
-          widget.statusBarPreferencesStore ??
-          SharedPreferencesStatusBarPreferencesStore(),
+        preferencesStore:
+            widget.statusBarPreferencesStore ??
+            SharedPreferencesStatusBarPreferencesStore(),
     );
     _editorStatusController = EditorStatusController();
     _statusBarInitialization = _initializeStatusBar();
     _executionController = ExecutionController();
     _terminalService = TerminalService();
     _fileExplorerController = FileExplorerController(
-      fileService: FileSystemService(),
-      watcherService: FileWatcherService(),
+        fileService: FileSystemService(),
+        watcherService: FileWatcherService(),
     );
     _lspRegistry =
         widget.lspRegistry ??
         LspServerRegistry(
-          diagnosticsService: _diagnosticsService,
-          autoStart: widget.autoStartLsp,
+            diagnosticsService: _diagnosticsService,
+            autoStart: widget.autoStartLsp,
         );
-  }
+    }
 
-  Future<void> _initializeStatusBar() async {
+    Future<void> _initializeStatusBar() async {
     await _statusBarService.initialize();
     if (_isDisposed) return;
     final editorContextContribution = EditorContextStatusContribution(
-          documents: _documentsController,
-          editorStatus: _editorStatusController,
-          statusBar: _statusBarService,
+            documents: _documentsController,
+            editorStatus: _editorStatusController,
+            statusBar: _statusBarService,
         );
     final diagnosticsContribution = DiagnosticsStatusContribution(
-          diagnostics: _diagnosticsService,
-          layout: _layoutController,
-          statusBar: _statusBarService,
+            diagnostics: _diagnosticsService,
+            layout: _layoutController,
+            statusBar: _statusBarService,
         );
     _disposeStatusBarContributions
-      ..add(editorContextContribution.dispose)
-      ..add(diagnosticsContribution.dispose);
-  }
+        ..add(editorContextContribution.dispose)
+        ..add(diagnosticsContribution.dispose);
+    }
 
-  @override
-  void dispose() {
+    @override
+    void dispose() {
     _isDisposed = true;
     for (final disposeContribution in _disposeStatusBarContributions) {
-      disposeContribution();
+        disposeContribution();
     }
     _statusBarService.dispose();
     _editorStatusController.dispose();
@@ -115,77 +117,77 @@ class _CodeEditorAppState extends State<CodeEditorApp> {
     _diagnosticsService.dispose();
     _lspRegistry.shutdownAll();
     super.dispose();
-  }
+    }
 
-  @override
-  Widget build(BuildContext context) {
+    @override
+    Widget build(BuildContext context) {
     const editorTheme = EditorThemeData.darkModern;
 
     return FutureBuilder<void>(
-      future: _statusBarInitialization,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState != ConnectionState.done) {
-          return const MaterialApp(
-            home: Scaffold(
-              body: Center(child: CircularProgressIndicator()),
-            ),
-          );
-        }
+        future: _statusBarInitialization,
+        builder: (context, snapshot) {
+            if (snapshot.connectionState != ConnectionState.done) {
+                return const MaterialApp(
+                   home: Scaffold(
+                        body: Center(child: CircularProgressIndicator()),
+                    ),
+                );
+            }
         if (snapshot.hasError) {
-          return MaterialApp(
+            return MaterialApp(
             home: Scaffold(
-              body: Center(
+                body: Center(
                 child: Text('Unable to initialize Status Bar: ${snapshot.error}'),
-              ),
+                ),
             ),
-          );
+            );
         }
         return EditorTheme(
-          theme: editorTheme,
-          child: StatusBarScope(
+            theme: editorTheme,
+            child: StatusBarScope(
             notifier: _statusBarService,
             child: EditorStatusScope(
-              notifier: _editorStatusController,
-              child: DiagnosticsScope(
+                notifier: _editorStatusController,
+                child: DiagnosticsScope(
                 notifier: _diagnosticsService,
-                child: ExecutionScope(
-                  notifier: _executionController,
-                  child: LspRegistryScope(
+               child: ExecutionScope(
+                    notifier: _executionController,
+                    child: LspRegistryScope(
                     registry: _lspRegistry,
                     child: WorkbenchLayoutScope(
-                      notifier: _layoutController,
-                      child: EditorDocumentsScope(
+                        notifier: _layoutController,
+                        child: EditorDocumentsScope(
                         notifier: _documentsController,
                         child: FileExplorerScope(
-                          notifier: _fileExplorerController,
-                          child: TerminalScope(
+                            notifier: _fileExplorerController,
+                            child: TerminalScope(
                             notifier: _terminalService,
                             child: MaterialApp(
-                              title: 'Modern Code Editor',
-                              debugShowCheckedModeBanner: false,
-                              theme: ThemeData.dark().copyWith(
+                                title: 'Modern Code Editor',
+                                debugShowCheckedModeBanner: false,
+                                theme: ThemeData.dark().copyWith(
                                 scaffoldBackgroundColor:
                                     editorTheme.editorBackground,
                                 canvasColor: editorTheme.sideBarBackground,
                                 dividerColor: editorTheme.sideBarBorder,
                                 colorScheme: ColorScheme.dark(
-                                  primary: editorTheme.accentColor,
-                                  surface: editorTheme.editorBackground,
+                                    primary: editorTheme.accentColor,
+                                    surface: editorTheme.editorBackground,
                                 ),
-                              ),
-                              home: const WorkbenchScaffold(),
+                                ),
+                                home: const WorkbenchScaffold(),
                             ),
-                          ),
+                            ),
                         ),
-                      ),
+                        ),
                     ),
-                  ),
+                    ),
                 ),
-              ),
+                ),
             ),
-          ),
+            ),
         );
-      },
+        },
     );
-  }
+    }
 }

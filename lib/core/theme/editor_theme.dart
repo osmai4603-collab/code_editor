@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../lsp/protocol/lsp_types.dart';
 
 /// نظام السمات والألوان المخصص لمحرر الأكواد
 /// مستوحى من نظام تصميم VS Code Dark+ Modern
@@ -25,6 +26,10 @@ class EditorThemeData {
   final Color editorScrollbarThumb;
   final Color editorScrollbarThumbHover;
   final Color editorScrollbarThumbActive;
+  final Color diagnosticError;
+  final Color diagnosticWarning;
+  final Color diagnosticInformation;
+  final Color diagnosticHint;
   final Color tabActiveBackground;
   final Color tabActiveForeground;
   final Color tabActiveBorderTop;
@@ -81,6 +86,10 @@ class EditorThemeData {
     required this.editorScrollbarThumb,
     required this.editorScrollbarThumbHover,
     required this.editorScrollbarThumbActive,
+    required this.diagnosticError,
+    required this.diagnosticWarning,
+    required this.diagnosticInformation,
+    required this.diagnosticHint,
     required this.tabActiveBackground,
     required this.tabActiveForeground,
     required this.tabActiveBorderTop,
@@ -139,6 +148,10 @@ class EditorThemeData {
     editorScrollbarThumb: Color(0x997F7F7F),
     editorScrollbarThumbHover: Color(0xCC9E9E9E),
     editorScrollbarThumbActive: Color(0xFF0078D4),
+    diagnosticError: Color(0xFFF14C4C),
+    diagnosticWarning: Color(0xFFFFD580),
+    diagnosticInformation: Color(0xFF3794FF),
+    diagnosticHint: Color(0xFFB180D7),
     tabActiveBackground: Color(0xFF1F1F1F),
     tabActiveForeground: Color(0xFFFFFFFF),
     tabActiveBorderTop: Color(0xFF0078D4),
@@ -189,6 +202,13 @@ class EditorThemeData {
       Color(0xFFFFFFFF),
     ],
   );
+
+  Color diagnosticColor(DiagnosticSeverity severity) => switch (severity) {
+    DiagnosticSeverity.error => diagnosticError,
+    DiagnosticSeverity.warning => diagnosticWarning,
+    DiagnosticSeverity.information => diagnosticInformation,
+    DiagnosticSeverity.hint => diagnosticHint,
+  };
 }
 
 /// InheritedWidget لتوفير ثيم المحرر في كامل شجرة الودجات

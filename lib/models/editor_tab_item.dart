@@ -1,3 +1,5 @@
+import '../core/editor/indentation/editor_indentation_options.dart';
+
 /// نموذج يمثل ملفاً أو تبويباً مفتوحاً في المحرر
 class EditorTabItem {
   final String id;
@@ -7,6 +9,7 @@ class EditorTabItem {
   final bool isDirty;
   final bool isPreview;
   final String languageId;
+  final EditorIndentationOptions? indentationOptions;
 
   const EditorTabItem({
     required this.id,
@@ -16,6 +19,7 @@ class EditorTabItem {
     this.isDirty = false,
     this.isPreview = false,
     this.languageId = 'plaintext',
+    this.indentationOptions,
   });
 
   EditorTabItem copyWith({
@@ -26,6 +30,7 @@ class EditorTabItem {
     bool? isDirty,
     bool? isPreview,
     String? languageId,
+    EditorIndentationOptions? indentationOptions,
   }) {
     return EditorTabItem(
       id: id ?? this.id,
@@ -35,6 +40,7 @@ class EditorTabItem {
       isDirty: isDirty ?? this.isDirty,
       isPreview: isPreview ?? this.isPreview,
       languageId: languageId ?? this.languageId,
+      indentationOptions: indentationOptions ?? this.indentationOptions,
     );
   }
 }

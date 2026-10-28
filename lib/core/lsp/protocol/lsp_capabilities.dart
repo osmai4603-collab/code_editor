@@ -30,6 +30,8 @@ class LspClientCapabilities {
           'dynamicRegistration': false,
           'hierarchicalDocumentSymbolSupport': true,
         },
+        'formatting': {'dynamicRegistration': false},
+        'rangeFormatting': {'dynamicRegistration': false},
         'definition': {
           'dynamicRegistration': false,
           'linkSupport': true,
@@ -88,6 +90,9 @@ class LspServerCapabilities {
   final bool hasCodeAction;
   final bool hasCodeLens;
   final bool hasDocumentSymbol;
+  final bool hasDocumentFormatting;
+  final bool hasDocumentRangeFormatting;
+  final bool hasDocumentOnTypeFormatting;
   final Map<String, dynamic> raw;
 
   const LspServerCapabilities({
@@ -100,6 +105,9 @@ class LspServerCapabilities {
     required this.hasCodeAction,
     required this.hasCodeLens,
     required this.hasDocumentSymbol,
+    required this.hasDocumentFormatting,
+    required this.hasDocumentRangeFormatting,
+    required this.hasDocumentOnTypeFormatting,
     required this.raw,
   });
 
@@ -115,6 +123,9 @@ class LspServerCapabilities {
         hasCodeAction: false,
         hasCodeLens: false,
         hasDocumentSymbol: false,
+        hasDocumentFormatting: false,
+        hasDocumentRangeFormatting: false,
+        hasDocumentOnTypeFormatting: false,
         raw: {},
       );
     }
@@ -142,6 +153,14 @@ class LspServerCapabilities {
       hasCodeLens: json.containsKey('codeLensProvider') && json['codeLensProvider'] != false,
       hasDocumentSymbol: json['documentSymbolProvider'] == true ||
           json['documentSymbolProvider'] is Map,
+      hasDocumentFormatting:
+          json['documentFormattingProvider'] == true ||
+          json['documentFormattingProvider'] is Map,
+      hasDocumentRangeFormatting:
+          json['documentRangeFormattingProvider'] == true ||
+          json['documentRangeFormattingProvider'] is Map,
+      hasDocumentOnTypeFormatting:
+          json['documentOnTypeFormattingProvider'] is Map,
       raw: json,
     );
   }

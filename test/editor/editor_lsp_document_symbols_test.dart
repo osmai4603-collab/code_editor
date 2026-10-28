@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:code_editor/core/editor/indentation/editor_indentation_options.dart';
 import 'package:code_editor/core/execution/execution_controller.dart';
 import 'package:code_editor/core/lsp/client/lsp_client.dart';
 import 'package:code_editor/core/lsp/connection/lsp_channel.dart';
@@ -18,7 +19,10 @@ void main() {
     late ExecutionController execution;
     EditorLspExtension? extension;
 
-    Future<void> initializeClient({required bool supportsSymbols}) async {
+    Future<void> initializeClient({
+      required bool supportsSymbols,
+      bool supportsFormatting = false,
+    }) async {
       channel = _MockLspChannel();
       client = LspClient(channel: channel);
       final initialize = client.initialize(rootUri: 'file:///workspace');
@@ -27,7 +31,10 @@ void main() {
       channel.respond(
         requestId,
         result: {
-          'capabilities': {if (supportsSymbols) 'documentSymbolProvider': true},
+          'capabilities': {
+            if (supportsSymbols) 'documentSymbolProvider': true,
+            if (supportsFormatting) 'documentFormattingProvider': true,
+          },
         },
       );
       await initialize;
@@ -93,6 +100,62 @@ void main() {
         'newer',
       ]);
     });
+
+    test('sends formatting options and returns server edits', () async {
+      await initializeClient(supportsSymbols: false, supportsFormatting: true);
+      await extension!.syncActiveTab(_tab);
+
+      final formatting = extension!.formatDocument(
+        options: const EditorIndentationOptions(
+          tabSize: 2,
+          indentSize: 2,
+          insertSpaces: false,
+        ),
+      );
+      await pumpEventQueue();
+
+      final request = _requests(channel, 'textDocument/formatting').single;
+      expect(request['params']['options'], {
+        'tabSize': 2,
+        'insertSpaces': false,
+      });
+      channel.respond(
+        request['id'],
+        result: [
+          {
+            'range': {
+              'start': {'line': 0, 'character': 0},
+              'end': {'line': 0, 'character': 14},
+            },
+            'newText': 'void main() {}\n',
+          },
+        ],
+      );
+
+      final edits = await formatting;
+      expect(edits.single.newText, 'void main() {}\n');
+    });
+
+    test(
+      'does not apply formatting results for an outdated document',
+      () async {
+        await initializeClient(
+          supportsSymbols: false,
+          supportsFormatting: true,
+        );
+        await extension!.syncActiveTab(_tab);
+
+        final formatting = extension!.formatDocument(
+          options: const EditorIndentationOptions(),
+        );
+        await pumpEventQueue();
+        final request = _requests(channel, 'textDocument/formatting').single;
+        extension!.onContentChanged('changed while formatting');
+        channel.respond(request['id'], result: []);
+
+        expect(formatting, throwsStateError);
+      },
+    );
   });
 }
 

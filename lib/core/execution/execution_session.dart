@@ -1,9 +1,5 @@
 /// نوع سطر مخرجات التنفيذ
-enum OutputLineType {
-  stdout,
-  stderr,
-  systemInfo,
-}
+enum OutputLineType { stdout, stderr, systemInfo }
 
 /// سطر مفرد في سجل مخرجات التنفيذ مع توقيته ونوعه
 class ExecutionOutputLine {
@@ -19,16 +15,12 @@ class ExecutionOutputLine {
 }
 
 /// حالة جلسة التنفيذ
-enum ExecutionStatus {
-  idle,
-  running,
-  completed,
-  failed,
-  terminatedByUser,
-}
+enum ExecutionStatus { idle, running, completed, failed, terminatedByUser }
 
 /// بيانات جلسة تشغيل برنامج حي
 class ExecutionSession {
+  static const maxOutputLines = 5000;
+
   final String id;
   final String command;
   final List<String> args;
@@ -44,15 +36,16 @@ class ExecutionSession {
     required this.command,
     required this.args,
     this.workingDirectory,
-  })  : startTime = DateTime.now(),
-        status = ExecutionStatus.running;
+  }) : startTime = DateTime.now(),
+       status = ExecutionStatus.running;
 
   void addLine(String text, OutputLineType type) {
-    lines.add(ExecutionOutputLine(
-      text: text,
-      type: type,
-      timestamp: DateTime.now(),
-    ));
+    lines.add(
+      ExecutionOutputLine(text: text, type: type, timestamp: DateTime.now()),
+    );
+    if (lines.length > maxOutputLines) {
+      lines.removeRange(0, lines.length - maxOutputLines);
+    }
   }
 
   void finish(int code, {bool terminated = false}) {
@@ -63,10 +56,16 @@ class ExecutionSession {
       addLine('Process terminated by user.', OutputLineType.systemInfo);
     } else if (code == 0) {
       status = ExecutionStatus.completed;
-      addLine('Process exited successfully with code 0.', OutputLineType.systemInfo);
+      addLine(
+        'Process exited successfully with code 0.',
+        OutputLineType.systemInfo,
+      );
     } else {
       status = ExecutionStatus.failed;
-      addLine('Process failed with exit code $code.', OutputLineType.systemInfo);
+      addLine(
+        'Process failed with exit code $code.',
+        OutputLineType.systemInfo,
+      );
     }
   }
 }

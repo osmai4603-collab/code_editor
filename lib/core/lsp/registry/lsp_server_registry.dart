@@ -1,5 +1,8 @@
 import 'dart:async';
 import 'dart:io';
+
+import 'package:flutter/foundation.dart';
+
 import '../client/lsp_client.dart';
 import '../connection/lsp_process_channel.dart';
 import '../diagnostics/diagnostics_service.dart';
@@ -16,55 +19,62 @@ class LspServerRegistry {
   final Map<String, LspClient> _activeClients = {};
   final Map<String, StreamSubscription> _diagnosticSubscriptions = {};
 
-  LspServerRegistry({
-    required this.diagnosticsService,
-    this.autoStart = true,
-  }) {
+  LspServerRegistry({required this.diagnosticsService, this.autoStart = true}) {
     _registerDefaultDescriptors();
   }
 
   void _registerDefaultDescriptors() {
     // 1. خادم لغة Dart الافتراضي
-    register(LanguageServerDescriptor(
-      id: 'dart',
-      name: 'Dart Language Server',
-      languageId: 'dart',
-      fileExtensions: const ['.dart'],
-      command: _findDartExecutable(),
-      args: const ['language-server', '--protocol=lsp'],
-    ));
+    register(
+      LanguageServerDescriptor(
+        id: 'dart',
+        name: 'Dart Language Server',
+        languageId: 'dart',
+        fileExtensions: const ['.dart'],
+        command: _findDartExecutable(),
+        args: const ['language-server', '--protocol=lsp'],
+      ),
+    );
 
     // 2. خادم لغة Python (Pyright / Pylsp)
-    register(const LanguageServerDescriptor(
-      id: 'python',
-      name: 'Python Pyright',
-      languageId: 'python',
-      fileExtensions: ['.py'],
-      command: 'pyright-langserver',
-      args: ['--stdio'],
-    ));
+    register(
+      const LanguageServerDescriptor(
+        id: 'python',
+        name: 'Python Pyright',
+        languageId: 'python',
+        fileExtensions: ['.py'],
+        command: 'pyright-langserver',
+        args: ['--stdio'],
+      ),
+    );
 
     // 3. خادم GDScript LSP المستقل المجمّع (AOT) المبني فوق gdscript_engine
-    const compiledGdscriptLsp = '/home/osm/flutter_projects/gdscript_lsp/build/gdscript_lsp';
-    const sourceGdscriptLsp = '/home/osm/flutter_projects/gdscript_lsp/bin/gdscript_lsp.dart';
+    const compiledGdscriptLsp =
+        '/home/osm/flutter_projects/gdscript_lsp/build/gdscript_lsp';
+    const sourceGdscriptLsp =
+        '/home/osm/flutter_projects/gdscript_lsp/bin/gdscript_lsp.dart';
     if (File(compiledGdscriptLsp).existsSync()) {
-      register(const LanguageServerDescriptor(
-        id: 'gdscript',
-        name: 'GDScript Language Server',
-        languageId: 'gdscript',
-        fileExtensions: ['.gd'],
-        command: compiledGdscriptLsp,
-        args: [],
-      ));
+      register(
+        const LanguageServerDescriptor(
+          id: 'gdscript',
+          name: 'GDScript Language Server',
+          languageId: 'gdscript',
+          fileExtensions: ['.gd'],
+          command: compiledGdscriptLsp,
+          args: [],
+        ),
+      );
     } else if (File(sourceGdscriptLsp).existsSync()) {
-      register(LanguageServerDescriptor(
-        id: 'gdscript',
-        name: 'GDScript Language Server',
-        languageId: 'gdscript',
-        fileExtensions: const ['.gd'],
-        command: _findDartExecutable(),
-        args: const ['run', sourceGdscriptLsp],
-      ));
+      register(
+        LanguageServerDescriptor(
+          id: 'gdscript',
+          name: 'GDScript Language Server',
+          languageId: 'gdscript',
+          fileExtensions: const ['.gd'],
+          command: _findDartExecutable(),
+          args: const ['run', sourceGdscriptLsp],
+        ),
+      );
     }
   }
 
@@ -108,10 +118,16 @@ class LspServerRegistry {
     if (descriptor == null) return null;
 
     final existing = _activeClients[descriptor.id];
-    if (existing != null && !existing.channel.isClosed && existing.isInitialized) {
+    if (existing != null &&
+        !existing.channel.isClosed &&
+        existing.isInitialized) {
       return existing;
     }
+    if (existing != null) {
+      await _retireClient(descriptor.id, existing);
+    }
 
+    LspClient? client;
     try {
       final channel = await LspProcessChannel.start(
         executable: descriptor.command,
@@ -119,28 +135,46 @@ class LspServerRegistry {
         environment: descriptor.environment,
       );
 
-      final client = LspClient(channel: channel);
-
-      // الاستماع للتشخيصات وتوجيهها لخدمة المشاكل المركزية
-      _diagnosticSubscriptions[descriptor.id] = client.onDiagnostics.listen((diags) {
-        if (diags.isNotEmpty) {
-          final uri = diags.first.uri;
-          diagnosticsService.updateDiagnostics(uri, diags);
-        }
-      });
+      final startedClient = LspClient(channel: channel);
+      client = startedClient;
+      _diagnosticSubscriptions[descriptor.id] = startedClient.onDiagnostics.listen(
+        (event) => diagnosticsService.updateDiagnosticsFromSource(
+          descriptor.id,
+          event.uri,
+          event.diagnostics,
+          version: event.version,
+        ),
+        onDone: () {
+          if (identical(_activeClients[descriptor.id], client)) {
+            _activeClients.remove(descriptor.id);
+            _diagnosticSubscriptions.remove(descriptor.id);
+            diagnosticsService.clearForSource(descriptor.id);
+          }
+        },
+      );
 
       // إتمام المصافحة
-      await client.initialize(
+      await startedClient.initialize(
         rootUri: rootUri,
         initializationOptions: descriptor.initializationOptions,
       );
 
-      _activeClients[descriptor.id] = client;
-      return client;
-    } catch (_) {
-      // إذا فشل إطلاق العملية (مثلاً الأداة غير مثبتة في النظام)
+      _activeClients[descriptor.id] = startedClient;
+      return startedClient;
+    } catch (error) {
+      await _diagnosticSubscriptions.remove(descriptor.id)?.cancel();
+      await client?.close();
+      diagnosticsService.clearForSource(descriptor.id);
+      debugPrint('Failed to start ${descriptor.name}: $error');
       return null;
     }
+  }
+
+  Future<void> _retireClient(String id, LspClient client) async {
+    await _diagnosticSubscriptions.remove(id)?.cancel();
+    if (identical(_activeClients[id], client)) _activeClients.remove(id);
+    diagnosticsService.clearForSource(id);
+    await client.close();
   }
 
   /// إنهاء كافة خوادم اللغات النشطة
@@ -150,6 +184,9 @@ class LspServerRegistry {
     }
     _diagnosticSubscriptions.clear();
 
+    for (final id in _activeClients.keys.toList()) {
+      diagnosticsService.clearForSource(id);
+    }
     for (final client in _activeClients.values) {
       await client.shutdown();
     }

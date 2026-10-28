@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../../core/breadcrumbs/models/breadcrumb_symbol.dart';
 import '../../../core/execution/execution_controller.dart';
+import '../../../core/editor/indentation/editor_indentation_options.dart';
 import '../../../core/lsp/client/lsp_client.dart';
 import '../../../core/lsp/diagnostics/diagnostics_service.dart';
 import '../../../core/lsp/protocol/lsp_semantic_tokens_types.dart';
@@ -59,6 +60,10 @@ class EditorLspExtension extends ChangeNotifier {
   List<BreadcrumbSymbol> get documentSymbols => _documentSymbols;
   bool get documentSymbolsLoading => _documentSymbolsLoading;
   String? get documentSymbolsError => _documentSymbolsError;
+  bool get canFormatDocument =>
+      _activeClient?.serverCapabilities?.hasDocumentFormatting == true;
+  bool get canFormatRange =>
+      _activeClient?.serverCapabilities?.hasDocumentRangeFormatting == true;
 
   /// مزامنة التبويب النشط في المحرر
   Future<void> syncActiveTab(
@@ -245,6 +250,71 @@ class EditorLspExtension extends ChangeNotifier {
     } catch (_) {
       // تجاهل إذا كان الخادم لا يدعم الرموز الدلالية
     }
+  }
+
+  Future<List<TextEdit>> formatDocument({
+    required EditorIndentationOptions options,
+    LspRange? range,
+  }) async {
+    final client = _activeClient;
+    final tab = _currentTab;
+    if (_disposed || client == null || tab == null) {
+      throw StateError('No language server is available for this document');
+    }
+
+    final capabilities = client.serverCapabilities;
+    final method = range == null
+        ? 'textDocument/formatting'
+        : 'textDocument/rangeFormatting';
+    final supported = range == null
+        ? capabilities?.hasDocumentFormatting == true
+        : capabilities?.hasDocumentRangeFormatting == true;
+    if (!supported) {
+      throw StateError('The language server does not support this formatting action');
+    }
+
+    final uri = _uriForPath(tab.path);
+    _debouncer.flush(uri);
+    final contentVersion = _contentVersion;
+    final documentText = _documentText;
+    final params = <String, dynamic>{
+      'textDocument': {'uri': uri},
+      'options': {
+        'tabSize': options.tabSize,
+        'insertSpaces': options.insertSpaces,
+      },
+    };
+    if (range != null) params['range'] = range.toJson();
+
+    final response = await client.sendRequest(
+      method,
+      params,
+      const Duration(seconds: 10),
+    );
+    if (_disposed ||
+        _currentTab?.id != tab.id ||
+        _contentVersion != contentVersion ||
+        _documentText != documentText) {
+      throw StateError('The document changed while formatting was in progress');
+    }
+    if (response.isError) {
+      throw StateError(
+        response.error?.message ?? 'The language server formatting request failed',
+      );
+    }
+    if (response.result == null) return const [];
+    if (response.result is! List) {
+      throw FormatException('The language server returned invalid formatting edits');
+    }
+
+    return (response.result as List).map((edit) {
+      if (edit is! Map<String, dynamic> ||
+          edit['range'] is! Map<String, dynamic> ||
+          edit['newText'] is! String) {
+        throw FormatException('The language server returned an invalid text edit');
+      }
+      return TextEdit.fromJson(edit);
+    }).toList(growable: false);
   }
 
   /// طلب الإكمال التلقائي عند موضع المؤشر

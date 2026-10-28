@@ -7,9 +7,12 @@ import 'process_runner.dart';
 ///
 /// يدير الجلسات المفتوحة، ويربط زر Run بشاشة مخرجات اللوحة السفلية (Panel Output).
 class ExecutionController extends ChangeNotifier {
+  static const maxHistoryLength = 50;
+
   ProcessRunner? _currentRunner;
   ExecutionSession? _activeSession;
   final List<ExecutionSession> _history = [];
+  int _nextSessionId = 0;
 
   ExecutionSession? get activeSession => _activeSession;
   List<ExecutionSession> get history => List.unmodifiable(_history);
@@ -40,7 +43,7 @@ class ExecutionController extends ChangeNotifier {
     }
 
     final session = ExecutionSession(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      id: 'execution_${DateTime.now().microsecondsSinceEpoch}_${_nextSessionId++}',
       command: command,
       args: args,
       workingDirectory: workingDirectory,
@@ -48,6 +51,9 @@ class ExecutionController extends ChangeNotifier {
 
     _activeSession = session;
     _history.add(session);
+    if (_history.length > maxHistoryLength) {
+      _history.removeRange(0, _history.length - maxHistoryLength);
+    }
     notifyListeners();
 
     final runner = ProcessRunner();
@@ -70,8 +76,8 @@ class ExecutionController extends ChangeNotifier {
   }
 
   /// مسح سجل المخرجات الحالي
-  void clearOutput() {
-    _activeSession?.lines.clear();
+  void clearOutput({ExecutionSession? session}) {
+    (session ?? _activeSession)?.lines.clear();
     notifyListeners();
   }
 

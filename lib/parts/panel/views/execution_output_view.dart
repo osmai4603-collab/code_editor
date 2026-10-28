@@ -1,17 +1,15 @@
 import 'package:flutter/material.dart';
+
 import '../../../core/execution/execution_controller.dart';
 import '../../../core/execution/execution_session.dart';
 import '../../../core/theme/editor_theme.dart';
 import '../../../layout/controllers/editor_controller.dart';
+import '../../../models/editor_tab_item.dart';
 
-/// شاشة مخرجات تنفيذ البرامج في اللوحة السفلية (Execution Output View)
 class ExecutionOutputView extends StatefulWidget {
   final ExecutionController executionController;
 
-  const ExecutionOutputView({
-    super.key,
-    required this.executionController,
-  });
+  const ExecutionOutputView({super.key, required this.executionController});
 
   @override
   State<ExecutionOutputView> createState() => _ExecutionOutputViewState();
@@ -19,28 +17,64 @@ class ExecutionOutputView extends StatefulWidget {
 
 class _ExecutionOutputViewState extends State<ExecutionOutputView> {
   final ScrollController _scrollController = ScrollController();
+  final TextEditingController _searchController = TextEditingController();
+  String? _selectedSessionId;
+  String? _lastActiveSessionId;
+  bool _shouldFollowOutput = true;
 
   @override
   void initState() {
     super.initState();
-    widget.executionController.addListener(_scrollToBottom);
+    _lastActiveSessionId = widget.executionController.activeSession?.id;
+    _selectedSessionId = _lastActiveSessionId;
+    widget.executionController.addListener(_handleControllerChanged);
+    _scrollController.addListener(_handleScrollChanged);
+  }
+
+  @override
+  void didUpdateWidget(covariant ExecutionOutputView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.executionController != widget.executionController) {
+      oldWidget.executionController.removeListener(_handleControllerChanged);
+      widget.executionController.addListener(_handleControllerChanged);
+      _lastActiveSessionId = widget.executionController.activeSession?.id;
+      _selectedSessionId = _lastActiveSessionId;
+    }
   }
 
   @override
   void dispose() {
-    widget.executionController.removeListener(_scrollToBottom);
+    widget.executionController.removeListener(_handleControllerChanged);
+    _scrollController.removeListener(_handleScrollChanged);
     _scrollController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
-  void _scrollToBottom() {
-    if (_scrollController.hasClients) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (_scrollController.hasClients) {
-          _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
-        }
-      });
+  void _handleControllerChanged() {
+    final activeId = widget.executionController.activeSession?.id;
+    if (activeId != _lastActiveSessionId) {
+      _lastActiveSessionId = activeId;
+      _selectedSessionId = activeId;
+      _shouldFollowOutput = true;
+      if (mounted) setState(() {});
     }
+    if (_shouldFollowOutput) _scrollToBottom();
+  }
+
+  void _handleScrollChanged() {
+    if (!_scrollController.hasClients) return;
+    final position = _scrollController.position;
+    _shouldFollowOutput = position.maxScrollExtent - position.pixels <= 28;
+  }
+
+  void _scrollToBottom() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_shouldFollowOutput || !_scrollController.hasClients) {
+        return;
+      }
+      _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+    });
   }
 
   @override
@@ -52,87 +86,80 @@ class _ExecutionOutputViewState extends State<ExecutionOutputView> {
     return ListenableBuilder(
       listenable: widget.executionController,
       builder: (context, _) {
-        final session = widget.executionController.activeSession;
+        final history = widget.executionController.history;
+        final selectedSession = _sessionFor(history);
         final isRunning = widget.executionController.isRunning;
+        final query = _searchController.text.trim().toLowerCase();
+        final lines =
+            selectedSession?.lines
+                .where(
+                  (line) =>
+                      query.isEmpty || line.text.toLowerCase().contains(query),
+                )
+                .toList(growable: false) ??
+            const <ExecutionOutputLine>[];
 
         return Column(
           children: [
-            // شريط أدوات التحكم السريع في التشغيل
-            Container(
-              height: 28,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              decoration: BoxDecoration(
-                color: theme.panelBackground,
-                border: Border(
-                  bottom: BorderSide(
-                    color: theme.panelBorder.withValues(alpha: 0.3),
-                    width: 1.0,
-                  ),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Text(
-                    session != null
-                        ? 'Status: ${session.status.name.toUpperCase()}'
-                        : 'No active execution',
-                    style: TextStyle(
-                      color: isRunning ? Colors.greenAccent : theme.panelForeground.withValues(alpha: 0.5),
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const Spacer(),
-                  // زر تشغيل الملف النشط
-                  _buildToolbarBtn(
-                    icon: Icons.play_arrow_rounded,
-                    color: Colors.greenAccent,
-                    tooltip: activeTab != null ? 'Run ${activeTab.title}' : 'Run Active File',
-                    onTap: activeTab != null && !isRunning
-                        ? () => widget.executionController.runFile(activeTab.path)
-                        : null,
-                  ),
-                  // زر إيقاف التشغيل
-                  _buildToolbarBtn(
-                    icon: Icons.stop_rounded,
-                    color: Colors.redAccent,
-                    tooltip: 'Stop Execution',
-                    onTap: isRunning ? widget.executionController.stopExecution : null,
-                  ),
-                  // زر مسح المخرجات
-                  _buildToolbarBtn(
-                    icon: Icons.clear_all_rounded,
-                    color: theme.panelForeground.withValues(alpha: 0.7),
-                    tooltip: 'Clear Output',
-                    onTap: session != null && session.lines.isNotEmpty
-                        ? widget.executionController.clearOutput
-                        : null,
-                  ),
-                ],
-              ),
+            _buildToolbar(
+              theme,
+              history,
+              selectedSession,
+              activeTab,
+              isRunning,
             ),
-
-            // قائمة سطور المخرجات
             Expanded(
-              child: session == null || session.lines.isEmpty
-                  ? Center(
-                      child: Text(
-                        'Select a file and click Run to see execution output here.',
-                        style: TextStyle(
-                          color: theme.panelForeground.withValues(alpha: 0.4),
-                          fontSize: 12.5,
+              child: Stack(
+                children: [
+                  if (selectedSession == null)
+                    _emptyState(
+                      theme,
+                      'Run a file to start an execution output session.',
+                    )
+                  else if (lines.isEmpty)
+                    _emptyState(
+                      theme,
+                      selectedSession.lines.isEmpty
+                          ? 'This execution has no output yet.'
+                          : 'No output matches the current search.',
+                      action: selectedSession.lines.isEmpty
+                          ? null
+                          : () {
+                              _searchController.clear();
+                              setState(() {});
+                            },
+                    )
+                  else
+                    ListView.builder(
+                      controller: _scrollController,
+                      padding: const EdgeInsets.fromLTRB(12, 8, 12, 36),
+                      itemCount: lines.length,
+                      itemBuilder: (context, index) =>
+                          _buildOutputLineWidget(lines[index], theme),
+                    ),
+                  if (lines.isNotEmpty && !_shouldFollowOutput)
+                    PositionedDirectional(
+                      end: 12,
+                      bottom: 8,
+                      child: TextButton.icon(
+                        onPressed: () {
+                          _shouldFollowOutput = true;
+                          _scrollToBottom();
+                        },
+                        icon: const Icon(Icons.arrow_downward, size: 14),
+                        label: const Text('Scroll to bottom'),
+                        style: TextButton.styleFrom(
+                          backgroundColor: theme.panelBackground,
+                          foregroundColor: theme.panelForeground,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 6,
+                          ),
                         ),
                       ),
-                    )
-                  : ListView.builder(
-                      controller: _scrollController,
-                      padding: const EdgeInsets.all(12),
-                      itemCount: session.lines.length,
-                      itemBuilder: (context, index) {
-                        final line = session.lines[index];
-                        return _buildOutputLineWidget(line, theme);
-                      },
                     ),
+                ],
+              ),
             ),
           ],
         );
@@ -140,45 +167,213 @@ class _ExecutionOutputViewState extends State<ExecutionOutputView> {
     );
   }
 
-  Widget _buildToolbarBtn({
-    required IconData icon,
-    required Color color,
-    required String tooltip,
-    required VoidCallback? onTap,
-  }) {
-    return Tooltip(
-      message: tooltip,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(4),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-          child: Icon(
-            icon,
-            size: 16,
-            color: onTap != null ? color : Colors.white24,
-          ),
+  Widget _buildToolbar(
+    EditorThemeData theme,
+    List<ExecutionSession> history,
+    ExecutionSession? selectedSession,
+    EditorTabItem? activeTab,
+    bool isRunning,
+  ) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(color: theme.panelBorder.withValues(alpha: 0.4)),
         ),
+      ),
+      child: Wrap(
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: 8,
+        runSpacing: 4,
+        children: [
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 150),
+            child: Text(
+              _statusLabel(selectedSession, isRunning),
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: _statusColor(selectedSession, isRunning, theme),
+                fontSize: 10.5,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          if (history.isNotEmpty)
+            SizedBox(
+              width: 170,
+              height: 30,
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: selectedSession?.id,
+                  isDense: true,
+                  isExpanded: true,
+                  dropdownColor: theme.panelBackground,
+                  style: TextStyle(color: theme.panelForeground, fontSize: 11),
+                  hint: const Text('Select execution'),
+                  items: history.reversed
+                      .map(
+                        (session) => DropdownMenuItem(
+                          value: session.id,
+                          child: Text(
+                            _sessionTitle(session),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (id) {
+                    if (id == null) return;
+                    setState(() {
+                      _selectedSessionId = id;
+                      _shouldFollowOutput = true;
+                    });
+                    _scrollToBottom();
+                  },
+                ),
+              ),
+            ),
+          SizedBox(
+            width: 170,
+            height: 30,
+            child: TextField(
+              controller: _searchController,
+              onChanged: (_) => setState(() {}),
+              style: TextStyle(color: theme.panelForeground, fontSize: 11),
+              decoration: InputDecoration(
+                hintText: 'Search output',
+                hintStyle: TextStyle(
+                  color: theme.panelForeground.withValues(alpha: 0.4),
+                  fontSize: 11,
+                ),
+                prefixIcon: const Icon(Icons.search, size: 15),
+                prefixIconConstraints: const BoxConstraints(
+                  minWidth: 28,
+                  minHeight: 28,
+                ),
+                suffixIcon: _searchController.text.isEmpty
+                    ? null
+                    : IconButton(
+                        tooltip: 'Clear search',
+                        onPressed: () {
+                          _searchController.clear();
+                          setState(() {});
+                        },
+                        icon: const Icon(Icons.close, size: 13),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(
+                          minWidth: 26,
+                          minHeight: 26,
+                        ),
+                      ),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 6,
+                  vertical: 4,
+                ),
+                isDense: true,
+                filled: true,
+                fillColor: theme.editorBackground,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(4),
+                  borderSide: BorderSide(color: theme.panelBorder),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(4),
+                  borderSide: BorderSide(color: theme.panelBorder),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(4),
+                  borderSide: BorderSide(color: theme.accentColor),
+                ),
+              ),
+            ),
+          ),
+          _buildToolbarButton(
+            icon: Icons.play_arrow_rounded,
+            color: const Color(0xFF23D18B),
+            tooltip: activeTab == null
+                ? 'Open a file before running'
+                : 'Run ${activeTab.title}',
+            onPressed: activeTab != null && !isRunning
+                ? () => widget.executionController.runFile(activeTab.path)
+                : null,
+          ),
+          _buildToolbarButton(
+            icon: Icons.stop_rounded,
+            color: theme.diagnosticError,
+            tooltip: 'Stop execution',
+            onPressed: isRunning
+                ? widget.executionController.stopExecution
+                : null,
+          ),
+          _buildToolbarButton(
+            icon: Icons.clear_all_rounded,
+            color: theme.panelForeground,
+            tooltip: 'Clear selected output',
+            onPressed:
+                selectedSession != null && selectedSession.lines.isNotEmpty
+                ? () => widget.executionController.clearOutput(
+                    session: selectedSession,
+                  )
+                : null,
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildOutputLineWidget(ExecutionOutputLine line, EditorThemeData theme) {
-    Color textColor;
-    FontStyle fontStyle = FontStyle.normal;
+  Widget _buildToolbarButton({
+    required IconData icon,
+    required Color color,
+    required String tooltip,
+    required VoidCallback? onPressed,
+  }) => Tooltip(
+    message: tooltip,
+    child: IconButton(
+      onPressed: onPressed,
+      tooltip: tooltip,
+      icon: Icon(icon, size: 17),
+      color: color,
+      disabledColor: themeDisabledColor(color),
+      visualDensity: VisualDensity.compact,
+      constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
+      padding: const EdgeInsets.all(4),
+    ),
+  );
 
-    switch (line.type) {
-      case OutputLineType.stdout:
-        textColor = theme.panelForeground.withValues(alpha: 0.9);
-        break;
-      case OutputLineType.stderr:
-        textColor = const Color(0xFFFF6B6B);
-        break;
-      case OutputLineType.systemInfo:
-        textColor = theme.accentColor;
-        fontStyle = FontStyle.italic;
-        break;
-    }
+  Widget _emptyState(
+    EditorThemeData theme,
+    String message, {
+    VoidCallback? action,
+  }) => Center(
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          message,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: theme.panelForeground.withValues(alpha: 0.5),
+            fontSize: 12,
+          ),
+        ),
+        if (action != null)
+          TextButton(onPressed: action, child: const Text('Clear search')),
+      ],
+    ),
+  );
+
+  Widget _buildOutputLineWidget(
+    ExecutionOutputLine line,
+    EditorThemeData theme,
+  ) {
+    final (textColor, fontStyle) = switch (line.type) {
+      OutputLineType.stdout => (
+        theme.panelForeground.withValues(alpha: 0.9),
+        FontStyle.normal,
+      ),
+      OutputLineType.stderr => (theme.diagnosticError, FontStyle.normal),
+      OutputLineType.systemInfo => (theme.accentColor, FontStyle.italic),
+    };
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 1.5),
@@ -193,4 +388,51 @@ class _ExecutionOutputViewState extends State<ExecutionOutputView> {
       ),
     );
   }
+
+  ExecutionSession? _sessionFor(List<ExecutionSession> history) {
+    final selectedId = _selectedSessionId;
+    if (selectedId != null) {
+      for (final session in history) {
+        if (session.id == selectedId) return session;
+      }
+    }
+    return widget.executionController.activeSession;
+  }
+
+  String _sessionTitle(ExecutionSession session) {
+    final path = session.args.isEmpty ? session.command : session.args.last;
+    final name = path.split(RegExp(r'[/\\]')).last;
+    final started = session.startTime;
+    final time =
+        '${started.hour.toString().padLeft(2, '0')}:${started.minute.toString().padLeft(2, '0')}:${started.second.toString().padLeft(2, '0')}';
+    return '$name · $time';
+  }
+
+  String _statusLabel(ExecutionSession? session, bool isRunning) {
+    if (session == null) return 'No execution';
+    if (isRunning && session.status == ExecutionStatus.running) {
+      return 'RUNNING';
+    }
+    final exitCode = session.exitCode;
+    return exitCode == null
+        ? session.status.name.toUpperCase()
+        : '${session.status.name.toUpperCase()} (exit $exitCode)';
+  }
+
+  Color _statusColor(
+    ExecutionSession? session,
+    bool isRunning,
+    EditorThemeData theme,
+  ) {
+    if (isRunning && session?.status == ExecutionStatus.running) {
+      return const Color(0xFF23D18B);
+    }
+    if (session?.status == ExecutionStatus.failed) return theme.diagnosticError;
+    if (session?.status == ExecutionStatus.completed) {
+      return const Color(0xFF23D18B);
+    }
+    return theme.panelForeground.withValues(alpha: 0.55);
+  }
+
+  Color themeDisabledColor(Color color) => color.withValues(alpha: 0.3);
 }

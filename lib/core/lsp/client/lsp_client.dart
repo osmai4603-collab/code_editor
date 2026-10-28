@@ -16,8 +16,8 @@ class LspClient {
   StreamSubscription<String>? _channelSubscription;
   final StreamController<LspNotification> _notificationController =
       StreamController<LspNotification>.broadcast();
-  final StreamController<List<DiagnosticItem>> _diagnosticsController =
-      StreamController<List<DiagnosticItem>>.broadcast();
+  final StreamController<DiagnosticPublishEvent> _diagnosticsController =
+      StreamController<DiagnosticPublishEvent>.broadcast();
 
   bool _isInitialized = false;
   bool _isShutdown = false;
@@ -36,7 +36,7 @@ class LspClient {
   LspChannel get channel => _channel;
 
   /// تيار التشخيصات والأخطاء المجمعة المستلمة من الخادم
-  Stream<List<DiagnosticItem>> get onDiagnostics =>
+  Stream<DiagnosticPublishEvent> get onDiagnostics =>
       _diagnosticsController.stream;
 
   /// تيار الإشعارات العامة
@@ -55,11 +55,19 @@ class LspClient {
       },
       onError: (err) {
         _requestManager.failAll(err);
+        unawaited(_closeDiagnosticsStream());
       },
       onDone: () {
         _requestManager.failAll(StateError('Lsp channel closed'));
+        unawaited(_closeDiagnosticsStream());
       },
     );
+  }
+
+  Future<void> _closeDiagnosticsStream() async {
+    if (!_diagnosticsController.isClosed) {
+      await _diagnosticsController.close();
+    }
   }
 
   void _handleRawMessage(String rawJson) {
@@ -95,16 +103,31 @@ class LspClient {
     _notificationController.add(notification);
 
     if (notification.method == 'textDocument/publishDiagnostics') {
-      final params = notification.params as Map<String, dynamic>?;
-      if (params != null) {
-        final uri = params['uri'] as String? ?? '';
-        final rawDiagnostics = params['diagnostics'] as List? ?? [];
-        final items = rawDiagnostics
-            .whereType<Map<String, dynamic>>()
-            .map((diag) => DiagnosticItem.fromJson(uri, diag))
-            .toList();
-        _diagnosticsController.add(items);
+      final params = notification.params;
+      if (params is! Map ||
+          params['uri'] is! String ||
+          (params['uri'] as String).isEmpty ||
+          params['diagnostics'] is! List) {
+        return;
       }
+
+      final uri = params['uri'] as String;
+      final items = (params['diagnostics'] as List)
+          .whereType<Map>()
+          .map(
+            (diagnostic) => DiagnosticItem.fromJson(
+              uri,
+              Map<String, dynamic>.from(diagnostic),
+            ),
+          )
+          .toList();
+      _diagnosticsController.add(
+        DiagnosticPublishEvent(
+          uri: uri,
+          diagnostics: items,
+          version: params['version'] is int ? params['version'] as int : null,
+        ),
+      );
     }
   }
 

@@ -1,7 +1,5 @@
 import 'dart:async';
-
 import 'package:flutter/material.dart';
-
 import '../../../core/breadcrumbs/models/breadcrumb_path_entry.dart';
 import '../../../core/breadcrumbs/models/breadcrumb_symbol.dart';
 import '../../../core/breadcrumbs/services/breadcrumbs_path_service.dart';

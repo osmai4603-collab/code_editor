@@ -1,15 +1,20 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+
+import '../../core/editor/indentation/editor_indentation_options.dart';
 import '../../models/editor_tab_item.dart';
 
 /// وحدة التحكم بإدارة التبويبات والمستندات المفتوحة في المحرر
 class EditorDocumentsController extends ChangeNotifier {
   final List<EditorTabItem> _tabs = [];
   int _activeTabIndex = -1;
+  EditorNavigationRequest? _navigationRequest;
+  int _nextNavigationRequestId = 0;
 
   List<EditorTabItem> get tabs => List.unmodifiable(_tabs);
   int get activeTabIndex => _activeTabIndex;
+  EditorNavigationRequest? get navigationRequest => _navigationRequest;
 
   EditorTabItem? get activeTab =>
       (_activeTabIndex >= 0 && _activeTabIndex < _tabs.length)
@@ -75,6 +80,20 @@ class EditorDocumentsController extends ChangeNotifier {
     }
   }
 
+  void requestNavigation({
+    required String path,
+    required int line,
+    required int character,
+  }) {
+    _navigationRequest = EditorNavigationRequest(
+      id: _nextNavigationRequestId++,
+      path: path,
+      line: line,
+      character: character,
+    );
+    notifyListeners();
+  }
+
   void closeTab(String id) {
     final index = _tabs.indexWhere((t) => t.id == id);
     if (index != -1) {
@@ -96,6 +115,13 @@ class EditorDocumentsController extends ChangeNotifier {
       _tabs[index] = _tabs[index].copyWith(content: newContent, isDirty: true);
       notifyListeners();
     }
+  }
+
+  void updateIndentationOptions(String id, EditorIndentationOptions options) {
+    final index = _tabs.indexWhere((tab) => tab.id == id);
+    if (index == -1) return;
+    _tabs[index] = _tabs[index].copyWith(indentationOptions: options);
+    notifyListeners();
   }
 
   Future<void> saveCurrentTab() async {
@@ -153,6 +179,20 @@ class EditorDocumentsController extends ChangeNotifier {
     }
     notifyListeners();
   }
+}
+
+class EditorNavigationRequest {
+  final int id;
+  final String path;
+  final int line;
+  final int character;
+
+  const EditorNavigationRequest({
+    required this.id,
+    required this.path,
+    required this.line,
+    required this.character,
+  });
 }
 
 class EditorDocumentsScope

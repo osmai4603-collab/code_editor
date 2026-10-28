@@ -6,7 +6,7 @@ import 'package:code_editor/core/file_system/models/file_tree_item.dart';
 import 'package:code_editor/core/breadcrumbs/models/breadcrumb_symbol.dart';
 import 'package:code_editor/core/lsp/protocol/lsp_types.dart';
 import 'package:code_editor/layout/controllers/editor_controller.dart';
-import 'package:code_editor/parts/editor/widgets/breadcrumbs/breadcrumbs_bar.dart';
+import 'package:code_editor/parts/editor/breadcrumbs/breadcrumbs_bar.dart';
 
 void main() {
   late Directory workspace;

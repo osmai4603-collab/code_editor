@@ -55,6 +55,18 @@ class LspRange {
   String toString() => 'Range($start -> $end)';
 }
 
+class TextEdit {
+  final LspRange range;
+  final String newText;
+
+  const TextEdit({required this.range, required this.newText});
+
+  factory TextEdit.fromJson(Map<String, dynamic> json) => TextEdit(
+        range: LspRange.fromJson(json['range'] as Map<String, dynamic>? ?? {}),
+        newText: json['newText'] as String? ?? '',
+      );
+}
+
 enum LspSymbolKind {
   file(1),
   module(2),
@@ -405,6 +417,18 @@ class DiagnosticItem {
   @override
   String toString() =>
       '[${severity.name.toUpperCase()}] $uri (${range.start}): $message';
+}
+
+class DiagnosticPublishEvent {
+  final String uri;
+  final List<DiagnosticItem> diagnostics;
+  final int? version;
+
+  DiagnosticPublishEvent({
+    required this.uri,
+    required List<DiagnosticItem> diagnostics,
+    this.version,
+  }) : diagnostics = List.unmodifiable(diagnostics);
 }
 
 /// نوع عنصر الإكمال التلقائي

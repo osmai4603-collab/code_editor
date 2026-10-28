@@ -86,6 +86,8 @@ void main() {
                 'textDocumentSync': 1,
                 'completionProvider': {'resolveProvider': true},
                 'hoverProvider': true,
+                'documentFormattingProvider': true,
+                'documentRangeFormattingProvider': true,
               },
             },
           }),
@@ -94,6 +96,8 @@ void main() {
         final caps = await initFuture;
         expect(caps.hasCompletion, isTrue);
         expect(caps.hasHover, isTrue);
+        expect(caps.hasDocumentFormatting, isTrue);
+        expect(caps.hasDocumentRangeFormatting, isTrue);
         expect(caps.textDocumentSync, equals(TextDocumentSyncKind.full));
         expect(client.isInitialized, isTrue);
 
@@ -108,9 +112,9 @@ void main() {
     test(
       'Dispatches publishDiagnostics notification to onDiagnostics stream',
       () async {
-        final receivedDiagnostics = <List<DiagnosticItem>>[];
-        client.onDiagnostics.listen((diags) {
-          receivedDiagnostics.add(diags);
+        final receivedEvents = <DiagnosticPublishEvent>[];
+        client.onDiagnostics.listen((event) {
+          receivedEvents.add(event);
         });
 
         channel.feedIncoming(
@@ -136,13 +140,40 @@ void main() {
 
         await pumpEventQueue();
 
-        expect(receivedDiagnostics.length, equals(1));
-        expect(receivedDiagnostics.first.length, equals(1));
-        final diag = receivedDiagnostics.first.first;
+        expect(receivedEvents.length, equals(1));
+        expect(receivedEvents.first.uri, equals('file:///main.dart'));
+        expect(receivedEvents.first.diagnostics.length, equals(1));
+        final diag = receivedEvents.first.diagnostics.first;
         expect(diag.uri, equals('file:///main.dart'));
         expect(diag.severity, equals(DiagnosticSeverity.error));
         expect(diag.message, equals('Undefined name "foo"'));
         expect(diag.range.start.line, equals(10));
+      },
+    );
+
+    test(
+      'Preserves URI and version when publishDiagnostics clears a file',
+      () async {
+        final events = <DiagnosticPublishEvent>[];
+        client.onDiagnostics.listen(events.add);
+        channel.feedIncoming(
+          jsonEncode({
+            'jsonrpc': '2.0',
+            'method': 'textDocument/publishDiagnostics',
+            'params': {
+              'uri': 'file:///workspace/a%20file.dart',
+              'version': 8,
+              'diagnostics': [],
+            },
+          }),
+        );
+
+        await pumpEventQueue();
+
+        expect(events, hasLength(1));
+        expect(events.single.uri, 'file:///workspace/a%20file.dart');
+        expect(events.single.version, 8);
+        expect(events.single.diagnostics, isEmpty);
       },
     );
 
@@ -204,19 +235,22 @@ void main() {
   });
 
   group('LspServerRegistry Tests', () {
-    test('Correctly registers and identifies GDScript server descriptor for .gd files', () {
-      final diagService = DiagnosticsService();
-      final registry = LspServerRegistry(
-        diagnosticsService: diagService,
-        autoStart: false,
-      );
+    test(
+      'Correctly registers and identifies GDScript server descriptor for .gd files',
+      () {
+        final diagService = DiagnosticsService();
+        final registry = LspServerRegistry(
+          diagnosticsService: diagService,
+          autoStart: false,
+        );
 
-      final descriptor = registry.findDescriptorForFile('/project/player.gd');
-      expect(descriptor, isNotNull);
-      expect(descriptor!.languageId, equals('gdscript'));
-      expect(descriptor.fileExtensions, contains('.gd'));
-      expect(descriptor.command, contains('gdscript_lsp'));
-      diagService.dispose();
-    });
+        final descriptor = registry.findDescriptorForFile('/project/player.gd');
+        expect(descriptor, isNotNull);
+        expect(descriptor!.languageId, equals('gdscript'));
+        expect(descriptor.fileExtensions, contains('.gd'));
+        expect(descriptor.command, contains('gdscript_lsp'));
+        diagService.dispose();
+      },
+    );
   });
 }

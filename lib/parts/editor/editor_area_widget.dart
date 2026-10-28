@@ -1,6 +1,12 @@
+import 'dart:math' as math;
+
 import 'package:code_editor/parts/editor/scrollbar/editor_scrollbar.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../core/editor/formatting/text_edit_applier.dart';
+import '../../core/editor/indentation/editor_indentation_options.dart';
+import '../../core/editor/indentation/editor_input_formatter.dart';
+import '../../core/editor/indentation/indentation_service.dart';
 import '../../core/breadcrumbs/models/breadcrumb_symbol.dart';
 import '../../core/breadcrumbs/services/breadcrumb_symbol_path_service.dart';
 import '../../core/file_system/controllers/file_explorer_controller.dart';
@@ -22,6 +28,9 @@ import 'widgets/code_lens_widget.dart';
 import 'widgets/completion_popup_widget.dart';
 import 'breadcrumbs/breadcrumbs_bar.dart';
 import 'widgets/hover_tooltip_widget.dart';
+import 'widgets/indentation_guides_painter.dart';
+import 'widgets/diagnostics_overview_ruler.dart';
+import 'widgets/editor_diagnostic_messages_painter.dart';
 
 /// مساحة التحرير الرئيسية (Editor Part) وتشمل التبويبات وسطح الكود مع ميزات LSP
 class EditorAreaWidget extends StatelessWidget {
@@ -74,6 +83,7 @@ class EditorAreaWidget extends StatelessWidget {
                   ? _CodeEditorSurface(
                       key: ValueKey(activeTab.id),
                       tabItem: activeTab,
+                      navigationRequest: editorController.navigationRequest,
                       scrollbarVisibility: scrollbarVisibility,
                       workspacePath: workspacePath,
                       rootUri: workspacePath == null
@@ -290,6 +300,7 @@ class EditorAreaWidget extends StatelessWidget {
 /// سطح عرض وتحرير الأكواد الفعلي مع ترقيم السطور وربط ميزات LSP
 class _CodeEditorSurface extends StatefulWidget {
   final EditorTabItem tabItem;
+  final EditorNavigationRequest? navigationRequest;
   final EditorScrollbarVisibility scrollbarVisibility;
   final String? workspacePath;
   final String rootUri;
@@ -298,6 +309,7 @@ class _CodeEditorSurface extends StatefulWidget {
   const _CodeEditorSurface({
     super.key,
     required this.tabItem,
+    required this.navigationRequest,
     required this.scrollbarVisibility,
     required this.workspacePath,
     required this.rootUri,
@@ -309,7 +321,13 @@ class _CodeEditorSurface extends StatefulWidget {
 }
 
 class _CodeEditorSurfaceState extends State<_CodeEditorSurface> {
+  static const _indentationService = IndentationService();
+  static const _textEditApplier = TextEditApplier();
   late CodeEditorController _textController;
+  late EditorIndentationOptions _indentationOptions;
+  late List<int> _indentationColumns;
+  late String _indentationSourceText;
+  late int _indentationSourceTabSize;
   late final ValueNotifier<List<BreadcrumbSymbol>> _activeSymbolPath;
   final FocusNode _editorFocusNode = FocusNode();
   final ScrollController _verticalScroll = ScrollController();
@@ -317,6 +335,8 @@ class _CodeEditorSurfaceState extends State<_CodeEditorSurface> {
   final ScrollController _horizontalScroll = ScrollController();
   bool _isSynchronizingScroll = false;
   bool _scrollMetricsRefreshScheduled = false;
+  bool _awaitingFormatSelectionChord = false;
+  int? _lastNavigationRequestId;
   EditorLspExtension? _lspExtension;
   bool _isExtensionInitialized = false;
   EditorStatusController? _editorStatusController;
@@ -327,6 +347,15 @@ class _CodeEditorSurfaceState extends State<_CodeEditorSurface> {
     _textController = CodeEditorController(
       text: widget.tabItem.content,
       filePath: widget.tabItem.path,
+    );
+    _indentationOptions =
+        widget.tabItem.indentationOptions ??
+        _indentationService.detect(widget.tabItem.content);
+    _indentationSourceText = _textController.text;
+    _indentationSourceTabSize = _indentationOptions.tabSize;
+    _indentationColumns = _buildIndentationColumns(
+      _indentationSourceText,
+      _indentationSourceTabSize,
     );
     _activeSymbolPath = ValueNotifier(const []);
     _textController.addListener(_onTextChanged);
@@ -375,6 +404,7 @@ class _CodeEditorSurfaceState extends State<_CodeEditorSurface> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    _applyNavigationRequest();
     _editorStatusController = EditorStatusScope.of(context);
     _updateEditorStatus();
     final diagnostics = DiagnosticsScope.of(context);
@@ -398,7 +428,57 @@ class _CodeEditorSurfaceState extends State<_CodeEditorSurface> {
     }
   }
 
+  @override
+  void didUpdateWidget(covariant _CodeEditorSurface oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.navigationRequest?.id != widget.navigationRequest?.id ||
+        oldWidget.tabItem.path != widget.tabItem.path) {
+      _applyNavigationRequest();
+    }
+  }
+
+  void _applyNavigationRequest() {
+    final request = widget.navigationRequest;
+    if (request == null ||
+        request.id == _lastNavigationRequestId ||
+        request.path != widget.tabItem.path) {
+      return;
+    }
+    _lastNavigationRequestId = request.id;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final offset = _offsetAtPosition(
+        _textController.text,
+        LspPosition(line: request.line, character: request.character),
+      );
+      _textController.selection = TextSelection.collapsed(offset: offset);
+      _editorFocusNode.requestFocus();
+      if (!_editorVerticalScroll.hasClients ||
+          !_editorVerticalScroll.position.hasContentDimensions) {
+        return;
+      }
+      final theme = EditorTheme.of(context);
+      final lineHeight = _measureLineHeight(context, _editorTextStyle(theme));
+      final targetOffset =
+          EditorConstants.editorTopInset + request.line * lineHeight;
+      _editorVerticalScroll.jumpTo(
+        targetOffset
+            .clamp(0, _editorVerticalScroll.position.maxScrollExtent)
+            .toDouble(),
+      );
+    });
+  }
+
   void _onTextChanged() {
+    if (_indentationSourceText != _textController.text ||
+        _indentationSourceTabSize != _indentationOptions.tabSize) {
+      _indentationSourceText = _textController.text;
+      _indentationSourceTabSize = _indentationOptions.tabSize;
+      _indentationColumns = _buildIndentationColumns(
+        _indentationSourceText,
+        _indentationSourceTabSize,
+      );
+    }
     _updateEditorStatus();
     _updateActiveSymbolPath();
     if (_textController.text != widget.tabItem.content) {
@@ -407,6 +487,20 @@ class _CodeEditorSurfaceState extends State<_CodeEditorSurface> {
       setState(() {});
     }
   }
+
+  List<int> _buildIndentationColumns(String text, int tabSize) => text
+      .split('\n')
+      .map((line) {
+        final prefix = _indentationService.indentationOf(line);
+        var columns = 0;
+        for (final character in prefix.split('')) {
+          columns = character == '\t'
+              ? ((columns ~/ tabSize) + 1) * tabSize
+              : columns + 1;
+        }
+        return columns;
+      })
+      .toList(growable: false);
 
   void _updateEditorStatus() {
     _editorStatusController?.update(
@@ -471,6 +565,22 @@ class _CodeEditorSurfaceState extends State<_CodeEditorSurface> {
     return painter.width + 2;
   }
 
+  TextStyle _editorTextStyle(EditorThemeData theme) => TextStyle(
+    color: theme.editorForeground,
+    fontSize: EditorConstants.editorFontSize,
+    fontFamily: 'JetBrains Mono',
+    height: EditorConstants.editorLineHeight,
+  );
+
+  double _measureLineHeight(BuildContext context, TextStyle style) {
+    final painter = TextPainter(
+      text: TextSpan(text: 'M', style: style),
+      textDirection: Directionality.of(context),
+      maxLines: 1,
+    )..layout();
+    return painter.preferredLineHeight;
+  }
+
   void _selectSymbol(BreadcrumbSymbol symbol) {
     final offset = _offsetAtPosition(
       _textController.text,
@@ -478,6 +588,235 @@ class _CodeEditorSurfaceState extends State<_CodeEditorSurface> {
     );
     _textController.selection = TextSelection.collapsed(offset: offset);
     _editorFocusNode.requestFocus();
+  }
+
+  KeyEventResult _handleEditorKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    final keyboard = HardwareKeyboard.instance;
+    if (_awaitingFormatSelectionChord) {
+      _awaitingFormatSelectionChord = false;
+      if (event.logicalKey == LogicalKeyboardKey.keyF &&
+          (keyboard.isControlPressed || keyboard.isMetaPressed)) {
+        _formatDocument(selectionOnly: true);
+        return KeyEventResult.handled;
+      }
+    }
+    if (event.logicalKey == LogicalKeyboardKey.keyK &&
+        (keyboard.isControlPressed || keyboard.isMetaPressed)) {
+      _awaitingFormatSelectionChord = true;
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.tab &&
+        !keyboard.isControlPressed &&
+        !keyboard.isMetaPressed) {
+      _insertIndentation(keyboard.isShiftPressed);
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.keyF &&
+        keyboard.isShiftPressed &&
+        (keyboard.isControlPressed || keyboard.isMetaPressed)) {
+      _formatDocument();
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.keyF &&
+        keyboard.isShiftPressed &&
+        keyboard.isAltPressed) {
+      _formatDocument();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  void _insertIndentation(bool outdent) {
+    final text = _textController.text;
+    final selection = _textController.selection;
+    if (!selection.isValid) return;
+    if (outdent) {
+      final lineStart = selection.start <= 0
+          ? 0
+          : text.lastIndexOf('\n', selection.start - 1) + 1;
+      final lineEndIndex = text.indexOf('\n', selection.end);
+      final lineEnd = lineEndIndex < 0 ? text.length : lineEndIndex;
+      final selectedLines = text.substring(lineStart, lineEnd);
+      final lines = selectedLines.split('\n');
+      final removedPerLine = <int>[];
+      final updatedLines = <String>[];
+      for (var index = 0; index < lines.length; index++) {
+        final line = lines[index];
+        final remove = line.startsWith('\t')
+            ? 1
+            : line.startsWith(' ')
+            ? _indentationOptions.indentSize.clamp(1, line.length).toInt()
+            : 0;
+        removedPerLine.add(remove);
+        updatedLines.add(line.substring(remove));
+      }
+      final updated = text.replaceRange(
+        lineStart,
+        lineEnd,
+        updatedLines.join('\n'),
+      );
+      int mapOutdentedOffset(int offset) {
+        var oldLineStart = lineStart;
+        var newLineStart = lineStart;
+        for (var index = 0; index < lines.length; index++) {
+          final oldLineEnd = oldLineStart + lines[index].length;
+          if (offset <= oldLineEnd || index == lines.length - 1) {
+            final column = (offset - oldLineStart)
+                .clamp(0, lines[index].length)
+                .toInt();
+            final newColumn = (column - removedPerLine[index])
+                .clamp(0, updatedLines[index].length)
+                .toInt();
+            return newLineStart + newColumn;
+          }
+          oldLineStart = oldLineEnd + 1;
+          newLineStart += updatedLines[index].length + 1;
+        }
+        return updated.length;
+      }
+
+      _textController.value = TextEditingValue(
+        text: updated,
+        selection: TextSelection(
+          baseOffset: mapOutdentedOffset(selection.baseOffset),
+          extentOffset: mapOutdentedOffset(selection.extentOffset),
+          isDirectional: selection.isDirectional,
+        ),
+      );
+      return;
+    }
+
+    final unit = _indentationOptions.indentUnit;
+    if (!selection.isCollapsed) {
+      final lineStart = selection.start <= 0
+          ? 0
+          : text.lastIndexOf('\n', selection.start - 1) + 1;
+      final lineEndIndex = text.indexOf('\n', selection.end);
+      final lineEnd = lineEndIndex < 0 ? text.length : lineEndIndex;
+      final selectedLines = text.substring(lineStart, lineEnd);
+      final lines = selectedLines.split('\n');
+      final indented = lines.map((line) => '$unit$line').join('\n');
+      final updated = text.replaceRange(lineStart, lineEnd, indented);
+      int mapOffset(int offset) {
+        final relative = (offset - lineStart).clamp(0, selectedLines.length);
+        final precedingLines = '\n'
+            .allMatches(selectedLines.substring(0, relative))
+            .length;
+        return offset + unit.length * (precedingLines + 1);
+      }
+
+      _textController.value = TextEditingValue(
+        text: updated,
+        selection: TextSelection(
+          baseOffset: mapOffset(selection.baseOffset),
+          extentOffset: mapOffset(selection.extentOffset),
+          isDirectional: selection.isDirectional,
+        ),
+      );
+      return;
+    }
+    final updated = text.replaceRange(selection.start, selection.end, unit);
+    _textController.value = TextEditingValue(
+      text: updated,
+      selection: TextSelection.collapsed(offset: selection.start + unit.length),
+    );
+  }
+
+  Future<void> _formatDocument({bool selectionOnly = false}) async {
+    final extension = _lspExtension;
+    if (extension == null) {
+      _showEditorMessage('No language server is available for this document');
+      return;
+    }
+    try {
+      final selection = _textController.selection;
+      final range = selectionOnly && selection.isValid && !selection.isCollapsed
+          ? LspRange(
+              start: _positionAtOffset(_textController.text, selection.start),
+              end: _positionAtOffset(_textController.text, selection.end),
+            )
+          : null;
+      if (selectionOnly && range == null) {
+        _showEditorMessage('Select a range to format');
+        return;
+      }
+      final edits = await extension.formatDocument(
+        options: _indentationOptions,
+        range: range,
+      );
+      if (!mounted) return;
+      if (edits.isNotEmpty) {
+        _textController.value = _textEditApplier.apply(
+          _textController.value,
+          edits,
+        );
+      }
+    } catch (error) {
+      _showEditorMessage('Formatting failed: $error');
+    }
+  }
+
+  void _convertIndentation({required bool toSpaces, int? size}) {
+    final current = _textController.value;
+    final changesIndentSize = size != null;
+    final converted = changesIndentSize && !_indentationOptions.insertSpaces
+        ? current.text
+        : _indentationService.convertIndentation(
+            current.text,
+            _indentationOptions,
+            toSpaces: toSpaces,
+            targetIndentSize: changesIndentSize ? size : null,
+          );
+    final oldLines = current.text.split('\n');
+    final newLines = converted.split('\n');
+    int mapOffset(int offset) {
+      var oldLineStart = 0;
+      var newLineStart = 0;
+      for (var line = 0; line < oldLines.length; line++) {
+        final oldLine = oldLines[line];
+        final newLine = newLines[line];
+        final oldIndent = _indentationService.indentationOf(oldLine).length;
+        final newIndent = _indentationService.indentationOf(newLine).length;
+        final oldLineEnd = oldLineStart + oldLine.length;
+        if (offset <= oldLineEnd) {
+          final column = offset - oldLineStart;
+          final mappedColumn = column <= oldIndent
+              ? column.clamp(0, newIndent).toInt()
+              : column + newIndent - oldIndent;
+          return newLineStart + mappedColumn;
+        }
+        oldLineStart = oldLineEnd + 1;
+        newLineStart += newLine.length + 1;
+      }
+      return converted.length;
+    }
+
+    _textController.value = TextEditingValue(
+      text: converted,
+      selection: TextSelection(
+        baseOffset: mapOffset(current.selection.baseOffset),
+        extentOffset: mapOffset(current.selection.extentOffset),
+        affinity: current.selection.affinity,
+        isDirectional: current.selection.isDirectional,
+      ),
+    );
+    final options = _indentationOptions.copyWith(
+      indentSize: size,
+      insertSpaces: toSpaces,
+      detectIndentation: false,
+    );
+    setState(() => _indentationOptions = options);
+    EditorDocumentsScope.of(
+      context,
+    ).updateIndentationOptions(widget.tabItem.id, options);
+  }
+
+  void _showEditorMessage(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
@@ -528,32 +867,121 @@ class _CodeEditorSurfaceState extends State<_CodeEditorSurface> {
 
     final lines = _textController.text.split('\n');
     final lineCount = lines.isEmpty ? 1 : lines.length;
-
-    // استخراج أسطر الأخطاء للملف الحالي
-    final fileDiags = diagnosticsService.getForUri(widget.tabItem.path);
-    final errorLines = fileDiags.map((d) => d.range.start.line).toSet();
+    final diagnostics = diagnosticsService.getForUri(widget.tabItem.path);
+    final diagnosticMessages =
+        EditorDiagnosticMessagesPainter.messagesForDiagnostics(
+          diagnostics,
+          lineCount,
+        );
+    final lineSeverities = DiagnosticsOverviewRulerLayout.buildLineSeverities(
+      diagnostics,
+      lineCount,
+    );
+    final hasCodeLens = _lspExtension?.hasMainFunction == true;
+    final textStyle = _editorTextStyle(theme);
+    final textLineHeight = _measureLineHeight(context, textStyle);
+    var documentExtent = lineCount * textLineHeight;
+    if (_editorVerticalScroll.hasClients &&
+        _editorVerticalScroll.position.hasContentDimensions) {
+      final metrics = _editorVerticalScroll.position;
+      documentExtent = math.max(
+        documentExtent,
+        metrics.maxScrollExtent + metrics.viewportDimension,
+      );
+    }
 
     return Column(
       children: [
-        ListenableBuilder(
-          listenable: _lspExtension!,
-          builder: (context, _) =>
-              ValueListenableBuilder<List<BreadcrumbSymbol>>(
-                valueListenable: _activeSymbolPath,
-                builder: (context, activeSymbols, _) => BreadcrumbsBar(
-                  filePath: widget.tabItem.path,
-                  workspacePath: widget.workspacePath,
-                  listDirectory: fileExplorer.listDirectoryForNavigation,
-                  openFile: (path) => EditorFileOpener(
-                    FileSystemService(),
-                  ).open(editor: documents, path: path),
-                  symbols: _lspExtension!.documentSymbols,
-                  activeSymbols: activeSymbols,
-                  symbolsLoading: _lspExtension!.documentSymbolsLoading,
-                  symbolsError: _lspExtension!.documentSymbolsError,
-                  onSelectSymbol: _selectSymbol,
-                ),
+        Row(
+          children: [
+            Expanded(
+              child: ListenableBuilder(
+                listenable: _lspExtension!,
+                builder: (context, _) =>
+                    ValueListenableBuilder<List<BreadcrumbSymbol>>(
+                      valueListenable: _activeSymbolPath,
+                      builder: (context, activeSymbols, _) => BreadcrumbsBar(
+                        filePath: widget.tabItem.path,
+                        workspacePath: widget.workspacePath,
+                        listDirectory: fileExplorer.listDirectoryForNavigation,
+                        openFile: (path) => EditorFileOpener(
+                          FileSystemService(),
+                        ).open(editor: documents, path: path),
+                        symbols: _lspExtension!.documentSymbols,
+                        activeSymbols: activeSymbols,
+                        symbolsLoading: _lspExtension!.documentSymbolsLoading,
+                        symbolsError: _lspExtension!.documentSymbolsError,
+                        onSelectSymbol: _selectSymbol,
+                      ),
+                    ),
               ),
+            ),
+            ListenableBuilder(
+              listenable: _lspExtension!,
+              builder: (context, _) => PopupMenuButton<String>(
+                tooltip:
+                    _lspExtension!.canFormatDocument ||
+                        _lspExtension!.canFormatRange
+                    ? 'Formatting and indentation'
+                    : 'Formatting is not supported by this language server',
+                icon: const Icon(Icons.format_indent_increase, size: 18),
+                onSelected: (action) {
+                  switch (action) {
+                    case 'formatDocument':
+                      _formatDocument();
+                    case 'formatSelection':
+                      _formatDocument(selectionOnly: true);
+                    case 'spaces':
+                      _convertIndentation(toSpaces: true);
+                    case 'tabs':
+                      _convertIndentation(toSpaces: false);
+                    case 'size2':
+                      _convertIndentation(
+                        toSpaces: _indentationOptions.insertSpaces,
+                        size: 2,
+                      );
+                    case 'size4':
+                      _convertIndentation(
+                        toSpaces: _indentationOptions.insertSpaces,
+                        size: 4,
+                      );
+                  }
+                },
+                itemBuilder: (context) => [
+                  PopupMenuItem(
+                    value: 'formatDocument',
+                    child: Text('Format Document'),
+                    enabled: _lspExtension?.canFormatDocument == true,
+                  ),
+                  PopupMenuItem(
+                    value: 'formatSelection',
+                    child: Text('Format Selection'),
+                    enabled: _lspExtension?.canFormatRange == true,
+                  ),
+                  const PopupMenuDivider(),
+                  PopupMenuItem(
+                    value: 'spaces',
+                    child: Text('Convert Indentation to Spaces'),
+                  ),
+                  PopupMenuItem(
+                    value: 'tabs',
+                    child: Text(
+                      'Convert Indentation to Tabs (Tab width: ${_indentationOptions.tabSize})',
+                    ),
+                  ),
+                  const PopupMenuDivider(),
+                  const PopupMenuItem(
+                    value: 'size2',
+                    child: Text('Indent Size: 2'),
+                  ),
+                  const PopupMenuItem(
+                    value: 'size4',
+                    child: Text('Indent Size: 4'),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
         Expanded(
           child: ListenableBuilder(
@@ -575,49 +1003,59 @@ class _CodeEditorSurfaceState extends State<_CodeEditorSurface> {
                           Container(
                             width: EditorConstants.gutterWidth,
                             color: theme.editorGutterBackground,
-                            child: ListView.builder(
-                              controller: _verticalScroll,
-                              physics: const ClampingScrollPhysics(),
-                              itemCount: lineCount,
-                              itemBuilder: (context, index) {
-                                final hasError = errorLines.contains(index);
+                            child: Padding(
+                              padding: EdgeInsets.only(
+                                top:
+                                    EditorConstants.editorTopInset +
+                                    (hasCodeLens
+                                        ? EditorConstants.codeLensHeight
+                                        : 0),
+                              ),
+                              child: ListView.builder(
+                                controller: _verticalScroll,
+                                physics: const ClampingScrollPhysics(),
+                                itemCount: lineCount,
+                                itemExtent: textLineHeight,
+                                itemBuilder: (context, index) {
+                                  final severity = lineSeverities[index];
+                                  final diagnosticColor = severity == null
+                                      ? theme.editorLineNumber
+                                      : theme.diagnosticColor(severity);
 
-                                return Container(
-                                  height: 20,
-                                  alignment: Alignment.centerRight,
-                                  padding: const EdgeInsets.only(right: 8),
-                                  child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.end,
-                                    children: [
-                                      if (hasError)
-                                        Container(
-                                          width: 6,
-                                          height: 6,
-                                          margin: const EdgeInsets.only(
-                                            right: 4,
+                                  return Container(
+                                    alignment: Alignment.centerRight,
+                                    padding: const EdgeInsets.only(right: 8),
+                                    child: Row(
+                                      mainAxisAlignment: MainAxisAlignment.end,
+                                      children: [
+                                        if (severity != null)
+                                          Container(
+                                            width: 6,
+                                            height: 6,
+                                            margin: const EdgeInsets.only(
+                                              right: 4,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: diagnosticColor,
+                                              shape: BoxShape.circle,
+                                            ),
                                           ),
-                                          decoration: const BoxDecoration(
-                                            color: Colors.redAccent,
-                                            shape: BoxShape.circle,
+                                        Text(
+                                          '${index + 1}',
+                                          style: TextStyle(
+                                            color: diagnosticColor,
+                                            fontSize: 12,
+                                            fontFamily: 'JetBrains Mono',
+                                            fontWeight: severity == null
+                                                ? FontWeight.normal
+                                                : FontWeight.bold,
                                           ),
                                         ),
-                                      Text(
-                                        '${index + 1}',
-                                        style: TextStyle(
-                                          color: hasError
-                                              ? Colors.redAccent
-                                              : theme.editorLineNumber,
-                                          fontSize: 12,
-                                          fontFamily: 'JetBrains Mono',
-                                          fontWeight: hasError
-                                              ? FontWeight.bold
-                                              : FontWeight.normal,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                );
-                              },
+                                      ],
+                                    ),
+                                  );
+                                },
+                              ),
                             ),
                           ),
 
@@ -630,83 +1068,219 @@ class _CodeEditorSurfaceState extends State<_CodeEditorSurface> {
                           // مساحة كتابة الكود
                           Expanded(
                             child: Padding(
-                              padding: const EdgeInsets.only(
-                                left: 8.0,
-                                top: 4.0,
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  // CodeLens التفاعلي (Run | Debug) فوق main()
-                                  if (_lspExtension != null &&
-                                      _lspExtension!.hasMainFunction)
-                                    Padding(
-                                      padding: const EdgeInsets.only(
-                                        left: 4,
-                                        bottom: 2,
+                              padding: const EdgeInsets.only(left: 8.0),
+                              child: Padding(
+                                padding: const EdgeInsets.only(
+                                  top: EditorConstants.editorTopInset,
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    // CodeLens التفاعلي (Run | Debug) فوق main()
+                                    if (hasCodeLens)
+                                      SizedBox(
+                                        height: EditorConstants.codeLensHeight,
+                                        child: Align(
+                                          alignment: Alignment.centerLeft,
+                                          child: CodeLensWidget(
+                                            onRun: () {
+                                              executionController.runFile(
+                                                widget.tabItem.path,
+                                              );
+                                              if (!layoutController
+                                                  .state
+                                                  .isPanelVisible) {
+                                                layoutController.togglePanel();
+                                              }
+                                              layoutController.selectPanelTab(
+                                                PanelTab.output,
+                                              );
+                                            },
+                                          ),
+                                        ),
                                       ),
-                                      child: CodeLensWidget(
-                                        onRun: () {
-                                          executionController.runFile(
-                                            widget.tabItem.path,
-                                          );
-                                          if (!layoutController
-                                              .state
-                                              .isPanelVisible) {
-                                            layoutController.togglePanel();
-                                          }
-                                          layoutController.selectPanelTab(
-                                            PanelTab.output,
+
+                                    Expanded(
+                                      child: LayoutBuilder(
+                                        builder: (context, constraints) {
+                                          final reservedRightWidth =
+                                              EditorConstants
+                                                  .diagnosticsRulerWidth +
+                                              EditorConstants
+                                                  .diagnosticsRulerGap +
+                                              EditorConstants
+                                                  .verticalScrollbarWidth;
+                                          final availableTextWidth =
+                                              (constraints.maxWidth -
+                                                      reservedRightWidth)
+                                                  .clamp(0.0, double.infinity)
+                                                  .toDouble();
+                                          final measuredContentWidth =
+                                              _longestLineWidth(
+                                                context,
+                                                lines,
+                                                textStyle,
+                                              );
+                                          final diagnosticMessagesWidth =
+                                              EditorDiagnosticMessagesPainter.requiredWidth(
+                                                messages: diagnosticMessages,
+                                                textStyle: textStyle.copyWith(
+                                                  fontSize:
+                                                      EditorConstants
+                                                          .editorFontSize *
+                                                      0.9,
+                                                ),
+                                                textDirection:
+                                                    Directionality.of(context),
+                                              );
+                                          final contentWidth =
+                                              math.max(
+                                                measuredContentWidth +
+                                                    diagnosticMessagesWidth,
+                                                availableTextWidth,
+                                              ) +
+                                              reservedRightWidth;
+                                          return SingleChildScrollView(
+                                            controller: _horizontalScroll,
+                                            scrollDirection: Axis.horizontal,
+                                            child: SizedBox(
+                                              width: contentWidth,
+                                              child: Padding(
+                                                padding: EdgeInsets.only(
+                                                  right: reservedRightWidth,
+                                                ),
+                                                child: Stack(
+                                                  fit: StackFit.expand,
+                                                  children: [
+                                                    Positioned.fill(
+                                                      child: AnimatedBuilder(
+                                                        animation:
+                                                            _editorVerticalScroll,
+                                                        builder: (context, _) => IgnorePointer(
+                                                          child: CustomPaint(
+                                                            painter: IndentationGuidesPainter(
+                                                              indentationColumns:
+                                                                  _indentationColumns,
+                                                              textStyle:
+                                                                  textStyle,
+                                                              options:
+                                                                  _indentationOptions,
+                                                              verticalOffset:
+                                                                  _editorVerticalScroll
+                                                                      .hasClients
+                                                                  ? _editorVerticalScroll
+                                                                        .offset
+                                                                  : 0,
+                                                              color: theme
+                                                                  .editorLineNumber
+                                                                  .withValues(
+                                                                    alpha: 0.35,
+                                                                  ),
+                                                            ),
+                                                            child:
+                                                                const SizedBox.expand(),
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    Focus(
+                                                      onKeyEvent:
+                                                          _handleEditorKey,
+                                                      child: TextField(
+                                                        controller:
+                                                            _textController,
+                                                        focusNode:
+                                                            _editorFocusNode,
+                                                        inputFormatters: [
+                                                          EditorInputFormatter(
+                                                            options:
+                                                                _indentationOptions,
+                                                            languageId: widget
+                                                                .tabItem
+                                                                .languageId,
+                                                          ),
+                                                        ],
+                                                        scrollController:
+                                                            _editorVerticalScroll,
+                                                        maxLines: null,
+                                                        expands: true,
+                                                        keyboardType:
+                                                            TextInputType
+                                                                .multiline,
+                                                        style: textStyle,
+                                                        decoration:
+                                                            const InputDecoration(
+                                                              border:
+                                                                  InputBorder
+                                                                      .none,
+                                                              isDense: true,
+                                                              contentPadding:
+                                                                  EdgeInsets
+                                                                      .zero,
+                                                            ),
+                                                      ),
+                                                    ),
+                                                    if (diagnosticMessages
+                                                        .isNotEmpty)
+                                                      Positioned.fill(
+                                                        child: AnimatedBuilder(
+                                                          animation:
+                                                              _editorVerticalScroll,
+                                                          builder: (context, _) {
+                                                            final messageLabels =
+                                                                diagnosticMessages
+                                                                    .map(
+                                                                      (
+                                                                        message,
+                                                                      ) =>
+                                                                          'Line ${message.line + 1}: ${message.message}',
+                                                                    )
+                                                                    .join('. ');
+                                                            return Semantics(
+                                                              label:
+                                                                  'Editor diagnostics: $messageLabels',
+                                                              child: IgnorePointer(
+                                                                child: CustomPaint(
+                                                                  painter: EditorDiagnosticMessagesPainter(
+                                                                    lines:
+                                                                        lines,
+                                                                    messages:
+                                                                        diagnosticMessages,
+                                                                    textStyle:
+                                                                        textStyle,
+                                                                    textDirection:
+                                                                        Directionality.of(
+                                                                          context,
+                                                                        ),
+                                                                    theme:
+                                                                        theme,
+                                                                    lineHeight:
+                                                                        textLineHeight,
+                                                                    verticalOffset:
+                                                                        _editorVerticalScroll
+                                                                            .hasClients
+                                                                        ? _editorVerticalScroll
+                                                                              .offset
+                                                                        : 0,
+                                                                  ),
+                                                                  child:
+                                                                      const SizedBox.expand(),
+                                                                ),
+                                                              ),
+                                                            );
+                                                          },
+                                                        ),
+                                                      ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ),
                                           );
                                         },
                                       ),
                                     ),
-
-                                  Expanded(
-                                    child: LayoutBuilder(
-                                      builder: (context, constraints) {
-                                        final textStyle = TextStyle(
-                                          color: theme.editorForeground,
-                                          fontSize: 13.5,
-                                          fontFamily: 'JetBrains Mono',
-                                          height: 1.48,
-                                        );
-                                        final contentWidth = _longestLineWidth(
-                                          context,
-                                          lines,
-                                          textStyle,
-                                        );
-                                        return SingleChildScrollView(
-                                          controller: _horizontalScroll,
-                                          scrollDirection: Axis.horizontal,
-                                          child: SizedBox(
-                                            width:
-                                                contentWidth >
-                                                    constraints.maxWidth
-                                                ? contentWidth
-                                                : constraints.maxWidth,
-                                            child: TextField(
-                                              controller: _textController,
-                                              focusNode: _editorFocusNode,
-                                              scrollController:
-                                                  _editorVerticalScroll,
-                                              maxLines: null,
-                                              expands: true,
-                                              keyboardType:
-                                                  TextInputType.multiline,
-                                              style: textStyle,
-                                              decoration: const InputDecoration(
-                                                border: InputBorder.none,
-                                                isDense: true,
-                                                contentPadding: EdgeInsets.zero,
-                                              ),
-                                            ),
-                                          ),
-                                        );
-                                      },
-                                    ),
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
                             ),
                           ),
@@ -737,10 +1311,12 @@ class _CodeEditorSurfaceState extends State<_CodeEditorSurface> {
                           onDismiss: () => _lspExtension!.hideHover(),
                         ),
                       Positioned(
-                        top: 0,
+                        top:
+                            EditorConstants.editorTopInset +
+                            (hasCodeLens ? EditorConstants.codeLensHeight : 0),
                         right: 0,
-                        bottom: 12,
-                        width: 12,
+                        bottom: EditorConstants.horizontalScrollbarHeight,
+                        width: EditorConstants.verticalScrollbarWidth,
                         child: EditorScrollbar(
                           key: const ValueKey('editor-vertical-scrollbar'),
                           axis: Axis.vertical,
@@ -749,10 +1325,29 @@ class _CodeEditorSurfaceState extends State<_CodeEditorSurface> {
                         ),
                       ),
                       Positioned(
+                        top:
+                            EditorConstants.editorTopInset +
+                            (hasCodeLens ? EditorConstants.codeLensHeight : 0),
+                        right:
+                            EditorConstants.verticalScrollbarWidth +
+                            EditorConstants.diagnosticsRulerGap,
+                        bottom: EditorConstants.horizontalScrollbarHeight,
+                        width: EditorConstants.diagnosticsRulerWidth,
+                        child: DiagnosticsOverviewRuler(
+                          diagnostics: diagnostics,
+                          lineCount: lineCount,
+                          lineHeight: textLineHeight,
+                          documentExtent: math.max(
+                            documentExtent,
+                            lineCount * textLineHeight,
+                          ),
+                        ),
+                      ),
+                      Positioned(
                         left: EditorConstants.gutterWidth + 9,
                         right: 0,
                         bottom: 0,
-                        height: 12,
+                        height: EditorConstants.horizontalScrollbarHeight,
                         child: EditorScrollbar(
                           key: const ValueKey('editor-horizontal-scrollbar'),
                           axis: Axis.horizontal,

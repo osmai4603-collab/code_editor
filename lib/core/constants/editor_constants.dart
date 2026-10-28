@@ -38,4 +38,12 @@ class EditorConstants {
   static const double breadcrumbsHeight = 22.0;
   static const double gutterWidth = 50.0;
   static const double minimapWidth = 60.0;
+  static const double editorFontSize = 13.5;
+  static const double editorLineHeight = 1.48;
+  static const double editorTopInset = 4.0;
+  static const double codeLensHeight = 22.0;
+  static const double diagnosticsRulerWidth = 7.0;
+  static const double diagnosticsRulerGap = 2.0;
+  static const double verticalScrollbarWidth = 12.0;
+  static const double horizontalScrollbarHeight = 12.0;
 }

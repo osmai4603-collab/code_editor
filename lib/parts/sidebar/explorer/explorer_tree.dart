@@ -335,10 +335,12 @@ class _ExplorerTreeState extends State<ExplorerTree> {
     FileTreeItem item,
     String name,
   ) async {
+    final diagnostics = DiagnosticsScope.of(context);
     try {
       final newPath = _join(_dirname(item.path), name);
       await controller.rename(item.path, name);
       editor.updatePaths(item.path, newPath);
+      diagnostics.clearForUri(item.path, recursive: true);
     } catch (error) {
       if (!context.mounted) return;
       _showError(context, 'Unable to rename "${item.name}": $error');
@@ -357,12 +359,19 @@ class _ExplorerTreeState extends State<ExplorerTree> {
       paths.map(_basename).toList(),
     );
     if (!confirmed || !context.mounted) return;
+    final diagnostics = DiagnosticsScope.of(context);
     try {
       await controller.delete(paths);
+      for (final path in paths) {
+        diagnostics.clearForUri(path, recursive: true);
+      }
       editor.closePaths(paths);
     } catch (error) {
       for (final path in paths) {
-        if (!await controller.exists(path)) editor.closePaths([path]);
+        if (!await controller.exists(path)) {
+          diagnostics.clearForUri(path, recursive: true);
+          editor.closePaths([path]);
+        }
       }
       if (!context.mounted) return;
       _showError(context, 'Unable to delete selected items: $error');
