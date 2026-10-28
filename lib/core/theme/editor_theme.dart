@@ -1,0 +1,152 @@
+import 'package:flutter/material.dart';
+
+/// نظام السمات والألوان المخصص لمحرر الأكواد
+/// مستوحى من نظام تصميم VS Code Dark+ Modern
+class EditorThemeData {
+  final Color titleBarBackground;
+  final Color titleBarForeground;
+  final Color titleBarBorder;
+  final Color activityBarBackground;
+  final Color activityBarForeground;
+  final Color activityBarActiveBorder;
+  final Color activityBarBadge;
+  final Color sideBarBackground;
+  final Color sideBarForeground;
+  final Color sideBarTitleForeground;
+  final Color sideBarBorder;
+  final Color editorBackground;
+  final Color editorForeground;
+  final Color editorGutterBackground;
+  final Color editorLineNumber;
+  final Color editorLineNumberActive;
+  final Color editorCurrentLineHighlight;
+  final Color editorSelection;
+  final Color tabActiveBackground;
+  final Color tabActiveForeground;
+  final Color tabActiveBorderTop;
+  final Color tabInactiveBackground;
+  final Color tabInactiveForeground;
+  final Color tabBorder;
+  final Color panelBackground;
+  final Color panelForeground;
+  final Color panelBorder;
+  final Color panelTitleActive;
+  final Color panelTitleInactive;
+  final Color statusBarBackground;
+  final Color statusBarForeground;
+  final Color statusBarItemHover;
+  final Color auxiliaryBarBackground;
+  final Color auxiliaryBarBorder;
+  final Color sashHover;
+  final Color sashActive;
+  final Color commandCenterBackground;
+  final Color commandCenterBorder;
+  final Color commandCenterForeground;
+  final Color accentColor;
+
+  const EditorThemeData({
+    required this.titleBarBackground,
+    required this.titleBarForeground,
+    required this.titleBarBorder,
+    required this.activityBarBackground,
+    required this.activityBarForeground,
+    required this.activityBarActiveBorder,
+    required this.activityBarBadge,
+    required this.sideBarBackground,
+    required this.sideBarForeground,
+    required this.sideBarTitleForeground,
+    required this.sideBarBorder,
+    required this.editorBackground,
+    required this.editorForeground,
+    required this.editorGutterBackground,
+    required this.editorLineNumber,
+    required this.editorLineNumberActive,
+    required this.editorCurrentLineHighlight,
+    required this.editorSelection,
+    required this.tabActiveBackground,
+    required this.tabActiveForeground,
+    required this.tabActiveBorderTop,
+    required this.tabInactiveBackground,
+    required this.tabInactiveForeground,
+    required this.tabBorder,
+    required this.panelBackground,
+    required this.panelForeground,
+    required this.panelBorder,
+    required this.panelTitleActive,
+    required this.panelTitleInactive,
+    required this.statusBarBackground,
+    required this.statusBarForeground,
+    required this.statusBarItemHover,
+    required this.auxiliaryBarBackground,
+    required this.auxiliaryBarBorder,
+    required this.sashHover,
+    required this.sashActive,
+    required this.commandCenterBackground,
+    required this.commandCenterBorder,
+    required this.commandCenterForeground,
+    required this.accentColor,
+  });
+
+  /// الثيم الداكن الافتراضي (Dark Modern)
+  static const darkModern = EditorThemeData(
+    titleBarBackground: Color(0xFF181818),
+    titleBarForeground: Color(0xFFCCCCCC),
+    titleBarBorder: Color(0xFF2B2B2B),
+    activityBarBackground: Color(0xFF181818),
+    activityBarForeground: Color(0xFF858585),
+    activityBarActiveBorder: Color(0xFF0078D4),
+    activityBarBadge: Color(0xFF0078D4),
+    sideBarBackground: Color(0xFF1E1E1E),
+    sideBarForeground: Color(0xFFCCCCCC),
+    sideBarTitleForeground: Color(0xFFBBBBBB),
+    sideBarBorder: Color(0xFF2B2B2B),
+    editorBackground: Color(0xFF1F1F1F),
+    editorForeground: Color(0xFFD4D4D4),
+    editorGutterBackground: Color(0xFF1F1F1F),
+    editorLineNumber: Color(0xFF6E7681),
+    editorLineNumberActive: Color(0xFFCCCCCC),
+    editorCurrentLineHighlight: Color(0x1AFFFFFF),
+    editorSelection: Color(0x33264F78),
+    tabActiveBackground: Color(0xFF1F1F1F),
+    tabActiveForeground: Color(0xFFFFFFFF),
+    tabActiveBorderTop: Color(0xFF0078D4),
+    tabInactiveBackground: Color(0xFF181818),
+    tabInactiveForeground: Color(0xFF969696),
+    tabBorder: Color(0xFF2B2B2B),
+    panelBackground: Color(0xFF181818),
+    panelForeground: Color(0xFFCCCCCC),
+    panelBorder: Color(0xFF2B2B2B),
+    panelTitleActive: Color(0xFFFFFFFF),
+    panelTitleInactive: Color(0xFF858585),
+    statusBarBackground: Color(0xFF181818),
+    statusBarForeground: Color(0xFFCCCCCC),
+    statusBarItemHover: Color(0x1AFFFFFF),
+    auxiliaryBarBackground: Color(0xFF1E1E1E),
+    auxiliaryBarBorder: Color(0xFF2B2B2B),
+    sashHover: Color(0xFF0078D4),
+    sashActive: Color(0xFF0078D4),
+    commandCenterBackground: Color(0xFF252526),
+    commandCenterBorder: Color(0xFF383838),
+    commandCenterForeground: Color(0xFFCCCCCC),
+    accentColor: Color(0xFF0078D4),
+  );
+}
+
+/// InheritedWidget لتوفير ثيم المحرر في كامل شجرة الودجات
+class EditorTheme extends InheritedWidget {
+  final EditorThemeData theme;
+
+  const EditorTheme({
+    super.key,
+    required this.theme,
+    required super.child,
+  });
+
+  static EditorThemeData of(BuildContext context) {
+    final result = context.dependOnInheritedWidgetOfExactType<EditorTheme>();
+    return result?.theme ?? EditorThemeData.darkModern;
+  }
+
+  @override
+  bool updateShouldNotify(EditorTheme oldWidget) => theme != oldWidget.theme;
+}
