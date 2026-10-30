@@ -82,7 +82,7 @@ class _SettingsEditorWidgetState extends State<SettingsEditorWidget> {
     );
     final theme = AppTheme.of(context);
     final isNarrow = MediaQuery.sizeOf(context).width < 700;
-    return ColoredBox(
+    return Material(
       color: theme.editorTheme.editorBackground,
       child: Column(
         children: [

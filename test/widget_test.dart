@@ -15,6 +15,16 @@ import 'package:code_editor/core/statusbar/status_bar_preferences_store.dart';
 import 'package:code_editor/core/editor/formatting/editor_formatting_preferences.dart';
 import 'package:code_editor/core/theme/app_theme.dart';
 import 'package:code_editor/core/theme/theme_preferences_store.dart';
+import 'package:code_editor/core/configuration/registry/default_settings.dart';
+import 'package:code_editor/core/configuration/services/configuration_service.dart';
+import 'package:code_editor/core/configuration/stores/configuration_store.dart';
+
+ConfigurationService createTestConfigurationService() => ConfigurationService(
+  registry: createDefaultConfigurationRegistry(),
+  userStore: InMemoryConfigurationStore(),
+  workspaceStore: InMemoryConfigurationStore(),
+  memoryStore: InMemoryConfigurationStore(),
+);
 
 void main() {
   testWidgets('CodeEditor Workbench Scaffold smoke test', (
@@ -31,6 +41,7 @@ void main() {
         statusBarPreferencesStore: InMemoryStatusBarPreferencesStore(),
         formattingPreferencesStore: InMemoryEditorFormattingPreferencesStore(),
         themePreferencesStore: InMemoryThemePreferencesStore(),
+        configurationService: createTestConfigurationService(),
       ),
     );
     await tester.pumpAndSettle();
@@ -64,6 +75,7 @@ void main() {
         statusBarPreferencesStore: InMemoryStatusBarPreferencesStore(),
         formattingPreferencesStore: InMemoryEditorFormattingPreferencesStore(),
         themePreferencesStore: InMemoryThemePreferencesStore(),
+        configurationService: createTestConfigurationService(),
       ),
     );
     await tester.pumpAndSettle();
@@ -85,6 +97,7 @@ void main() {
         statusBarPreferencesStore: InMemoryStatusBarPreferencesStore(),
         formattingPreferencesStore: InMemoryEditorFormattingPreferencesStore(),
         themePreferencesStore: InMemoryThemePreferencesStore(),
+        configurationService: createTestConfigurationService(),
       ),
     );
     await tester.pumpAndSettle();
@@ -110,6 +123,7 @@ void main() {
       statusBarPreferencesStore: InMemoryStatusBarPreferencesStore(),
       formattingPreferencesStore: InMemoryEditorFormattingPreferencesStore(),
       themePreferencesStore: themeStore,
+      configurationService: createTestConfigurationService(),
     );
 
     await tester.pumpWidget(createApp());

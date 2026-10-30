@@ -1,3 +1,4 @@
+import 'package:code_editor/core/configuration/contracts/configuration_service.dart';
 import 'package:code_editor/core/configuration/contracts/configuration_target.dart';
 import 'package:code_editor/core/configuration/registry/default_settings.dart';
 import 'package:code_editor/core/configuration/services/configuration_service.dart';

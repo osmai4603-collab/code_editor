@@ -56,8 +56,8 @@ class SharedPreferencesConfigurationStore implements IConfigurationStore {
       final value = preferences.get(entry);
       if (value is String || value is bool || value is int || value is double) {
         values[entry.substring(prefix.length)] = value;
-      } else if (value is List<String>) {
-        values[entry.substring(prefix.length)] = value;
+      } else if (value is List && value.every((item) => item is String)) {
+        values[entry.substring(prefix.length)] = value.cast<String>().toList();
       } else {
         throw FormatException('Unsupported stored configuration value: $entry');
       }

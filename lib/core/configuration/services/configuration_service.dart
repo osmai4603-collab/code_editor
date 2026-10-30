@@ -40,13 +40,13 @@ class ConfigurationService extends ChangeNotifier
       workspaceStore.readAll(),
       memoryStore.readAll(),
     ]);
-    _userValues = values[0];
-    _workspaceValues = values[1];
-    _memoryValues = values[2];
+    _userValues = Map.of(values[0]);
+    _workspaceValues = Map.of(values[1]);
+    _memoryValues = Map.of(values[2]);
   }
 
   Future<void> reloadWorkspace() async {
-    _workspaceValues = await workspaceStore.readAll();
+    _workspaceValues = Map.of(await workspaceStore.readAll());
     if (!_isDisposed) {
       _changes.add(
         ConfigurationChangeEvent(

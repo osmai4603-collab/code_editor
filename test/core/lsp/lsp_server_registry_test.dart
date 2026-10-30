@@ -7,6 +7,7 @@ import 'package:code_editor/core/lsp/diagnostics/diagnostics_service.dart';
 import 'package:code_editor/core/lsp/registry/language_server_descriptor.dart';
 import 'package:code_editor/core/lsp/registry/lsp_descriptor_source.dart';
 import 'package:code_editor/core/lsp/registry/lsp_server_registry.dart';
+import 'package:code_editor/core/languages/definitions/built_in_languages.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 class _DescriptorSource implements ILspDescriptorSource {
@@ -80,6 +81,17 @@ class _MockLspChannel implements LspChannel {
 }
 
 void main() {
+  test('Dart uses the SDK language server over LSP stdio', () {
+    final descriptor = builtInLanguageDefinitions()
+        .singleWhere((definition) => definition.id == 'dart')
+        .lspDescriptor!;
+
+    expect(descriptor.languageId, 'dart');
+    expect(descriptor.fileExtensions, ['.dart']);
+    expect(descriptor.command, endsWith('dart'));
+    expect(descriptor.args, ['language-server', '--protocol=lsp']);
+  });
+
   test('loads descriptors from sources and creates a client through a factory',
       () async {
     final source = _DescriptorSource();

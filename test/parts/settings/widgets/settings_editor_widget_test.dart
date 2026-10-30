@@ -25,7 +25,9 @@ void main() {
         child: AppTheme(
           theme: AppThemeData.darkModern,
           onThemeChanged: (_) async {},
-          child: const MaterialApp(home: SettingsEditorWidget()),
+          child: const MaterialApp(
+            home: Scaffold(body: SettingsEditorWidget()),
+          ),
         ),
       ),
     );
