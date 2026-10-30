@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/constants/editor_constants.dart';
 import '../../core/theme/editor_theme.dart';
+import '../../core/configuration/widgets/configuration_scope.dart';
 import '../../parts/activitybar/activitybar_widget.dart';
 import '../../parts/auxiliarybar/auxiliarybar_widget.dart';
 import '../../parts/editor/editor_area_widget.dart';
@@ -20,6 +21,11 @@ class WorkbenchScaffold extends StatelessWidget {
     final theme = EditorTheme.of(context);
     final layoutController = WorkbenchLayoutScope.of(context);
     final state = layoutController.state;
+    final statusBarVisible =
+        state.isStatusBarVisible &&
+        ConfigurationScope.of(
+          context,
+        ).getValue<bool>('workbench.statusBar.visible');
 
     return Scaffold(
       backgroundColor: theme.editorBackground,
@@ -114,8 +120,7 @@ class WorkbenchScaffold extends StatelessWidget {
             ),
 
             // 3. شريط الحالة السفلي (StatusBar)
-            if (state.isStatusBarVisible && !state.isZenMode)
-              const StatusBarWidget(),
+            if (statusBarVisible && !state.isZenMode) const StatusBarWidget(),
           ],
         ),
       ),

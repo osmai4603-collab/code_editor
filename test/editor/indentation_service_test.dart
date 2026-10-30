@@ -2,7 +2,7 @@ import 'package:code_editor/core/editor/indentation/editor_indentation_options.d
 import 'package:code_editor/core/editor/indentation/editor_input_formatter.dart';
 import 'package:code_editor/core/editor/indentation/indentation_service.dart';
 import 'package:code_editor/core/editor/indentation/language_indentation_rules.dart';
-import 'package:flutter/services.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -109,6 +109,10 @@ void main() {
     test('indents Enter after opening braces and between empty pairs', () {
       final normal = type('if (ready) {', 'if (ready) {\n');
       expect(normal.text, 'if (ready) {\n  ');
+      expect(
+        normal.selection,
+        TextSelection.collapsed(offset: normal.text.length),
+      );
 
       final emptyPair = type('{}', '{\n}', cursor: 1);
       expect(emptyPair.text, '{\n  \n}');
@@ -118,9 +122,24 @@ void main() {
       expect(parenthesisPair.text, '(\n  \n)');
     });
 
+    test('normalizes indentation supplied with the newline input', () {
+      final result = type(
+        'if ready:',
+        'if ready:\n        ',
+        languageId: 'python',
+      );
+
+      expect(result.text, 'if ready:\n  ');
+      expect(result.selection, const TextSelection.collapsed(offset: 12));
+    });
+
     test('uses language-specific Python block indentation', () {
       final result = type('if ready:', 'if ready:\n', languageId: 'python');
       expect(result.text, 'if ready:\n  ');
+      expect(
+        result.selection,
+        TextSelection.collapsed(offset: result.text.length),
+      );
     });
 
     test('accepts injected language indentation rules', () {
@@ -210,6 +229,10 @@ void main() {
         final result = type('if ready:\n  ', 'if ready:\n  run');
 
         expect(result.text, 'if ready:\n  run');
+        expect(
+          result.selection,
+          TextSelection.collapsed(offset: result.text.length),
+        );
       },
     );
 
@@ -251,7 +274,60 @@ void main() {
 
         expect(unindented.text, 'run()\n');
         expect(indented.text, '  run()\n  ');
+        expect(indented.selection, const TextSelection.collapsed(offset: 10));
       },
     );
+
+    test('Backspace joins a whitespace-only line to the previous line', () {
+      final indentedLine = type('before\n  ', 'before\n ');
+      final emptyLine = type('before\n', 'before');
+      final middleLine = type(
+        'before\n  \nafter',
+        'before\n \nafter',
+        cursor: 9,
+      );
+
+      expect(indentedLine.text, 'before');
+      expect(indentedLine.selection, const TextSelection.collapsed(offset: 6));
+      expect(emptyLine.text, 'before');
+      expect(emptyLine.selection, const TextSelection.collapsed(offset: 6));
+      expect(middleLine.text, 'before\nafter');
+      expect(middleLine.selection, const TextSelection.collapsed(offset: 6));
+    });
+
+    testWidgets('caret advances after Enter on a whitespace-only line', (
+      tester,
+    ) async {
+      final controller = TextEditingController();
+      addTearDown(controller.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: TextField(
+              controller: controller,
+              autofocus: true,
+              maxLines: null,
+              inputFormatters: [
+                EditorInputFormatter(
+                  options: const EditorIndentationOptions(indentSize: 2),
+                  languageId: 'plaintext',
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+      await tester.enterText(find.byType(TextField), '  ');
+      tester.testTextInput.updateEditingValue(
+        const TextEditingValue(
+          text: '  \n',
+          selection: TextSelection.collapsed(offset: 3),
+        ),
+      );
+      await tester.pump();
+
+      expect(controller.text, '  \n  ');
+      expect(controller.selection, const TextSelection.collapsed(offset: 5));
+    });
   });
 }

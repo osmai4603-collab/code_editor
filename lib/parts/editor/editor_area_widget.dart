@@ -26,6 +26,7 @@ import '../../core/statusbar/status_bar_scope.dart';
 import '../../core/statusbar/status_bar_service.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/editor_theme.dart';
+import '../settings/widgets/settings_editor_widget.dart';
 import '../../layout/controllers/editor_controller.dart';
 import '../../layout/controllers/layout_controller.dart';
 import '../../layout/controllers/lsp_and_execution_scope.dart';
@@ -64,6 +65,13 @@ class EditorAreaWidget extends StatelessWidget {
     return Focus(
       onKeyEvent: (_, event) {
         if (event is KeyDownEvent &&
+            event.logicalKey == LogicalKeyboardKey.comma &&
+            (HardwareKeyboard.instance.isControlPressed ||
+                HardwareKeyboard.instance.isMetaPressed)) {
+          editorController.openSettingsTab();
+          return KeyEventResult.handled;
+        }
+        if (event is KeyDownEvent &&
             event.logicalKey == LogicalKeyboardKey.keyS &&
             (HardwareKeyboard.instance.isControlPressed ||
                 HardwareKeyboard.instance.isMetaPressed)) {
@@ -90,7 +98,13 @@ class EditorAreaWidget extends StatelessWidget {
             ),
 
             Expanded(
-              child: activeTab != null
+              child: activeTab?.type == EditorTabType.settingsEditor
+                  ? SettingsEditorWidget(
+                      key: ValueKey(activeTab!.id),
+                      initialQuery: activeTab.settingsQuery,
+                      initialCategory: activeTab.settingsCategory,
+                    )
+                  : activeTab != null
                   ? _CodeEditorSurface(
                       key: ValueKey(activeTab.id),
                       tabItem: activeTab,
@@ -142,9 +156,9 @@ class EditorAreaWidget extends StatelessWidget {
           // أزرار سريعة في زاوية التبويبات (تشغيل الكود، تقسيم العرض)
           Row(
             children: [
-              if (activeTab != null)
+              if (activeTab?.type == EditorTabType.codeFile)
                 Tooltip(
-                  message: 'Run ${activeTab.title} (F5)',
+                  message: 'Run ${activeTab!.title} (F5)',
                   child: InkWell(
                     onTap: () {
                       executionController.runFile(activeTab.path);
@@ -205,7 +219,13 @@ class EditorAreaWidget extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _getFileIcon(tab.title),
+            tab.type == EditorTabType.settingsEditor
+                ? const Icon(
+                    Icons.settings_outlined,
+                    size: 14,
+                    color: Color(0xff9e9e9e),
+                  )
+                : _getFileIcon(tab.title),
             const SizedBox(width: 8),
             Text(
               tab.title,
@@ -1320,26 +1340,28 @@ class _CodeEditorSurfaceState extends State<_CodeEditorSurface> {
                 itemBuilder: (context) => [
                   PopupMenuItem(
                     value: 'formatDocument',
-                    enabled: _formattingController?.supportsDocumentFormatting ==
+                    enabled:
+                        _formattingController?.supportsDocumentFormatting ==
                         true,
                     child: Text('Format Document'),
                   ),
                   PopupMenuItem(
                     value: 'formatDocumentWith',
-                    enabled: _formattingController?.supportsDocumentFormatting ==
+                    enabled:
+                        _formattingController?.supportsDocumentFormatting ==
                         true,
                     child: const Text('Format Document With...'),
                   ),
                   PopupMenuItem(
                     value: 'formatSelection',
-                    enabled: _formattingController?.supportsRangeFormatting ==
-                        true,
+                    enabled:
+                        _formattingController?.supportsRangeFormatting == true,
                     child: Text('Format Selection'),
                   ),
                   PopupMenuItem(
                     value: 'formatModifiedLines',
-                    enabled: _formattingController?.supportsRangeFormatting ==
-                        true,
+                    enabled:
+                        _formattingController?.supportsRangeFormatting == true,
                     child: const Text('Format Modified Lines'),
                   ),
                   const PopupMenuDivider(),

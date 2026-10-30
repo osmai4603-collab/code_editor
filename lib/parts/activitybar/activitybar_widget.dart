@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../core/constants/editor_constants.dart';
 import '../../core/theme/editor_theme.dart';
 import '../../layout/controllers/layout_controller.dart';
+import '../../layout/controllers/editor_controller.dart';
 import '../../layout/models/layout_state.dart';
 
 /// شريط الأنشطة الجانبي (ActivityBar)
@@ -12,6 +13,7 @@ class ActivityBarWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = EditorTheme.of(context);
     final layoutController = WorkbenchLayoutScope.of(context);
+    final editorController = EditorDocumentsScope.of(context);
     final layoutState = layoutController.state;
 
     return Container(
@@ -28,42 +30,52 @@ class ActivityBarWidget extends StatelessWidget {
           _buildItem(
             icon: Icons.copy_rounded,
             tooltip: 'Explorer (Ctrl+Shift+E)',
-            isSelected: layoutState.isSideBarVisible &&
+            isSelected:
+                layoutState.isSideBarVisible &&
                 layoutState.activeActivity == ActivityBarItem.explorer,
             theme: theme,
-            onTap: () => layoutController.selectActivity(ActivityBarItem.explorer),
+            onTap: () =>
+                layoutController.selectActivity(ActivityBarItem.explorer),
           ),
           _buildItem(
             icon: Icons.search_rounded,
             tooltip: 'Search (Ctrl+Shift+F)',
-            isSelected: layoutState.isSideBarVisible &&
+            isSelected:
+                layoutState.isSideBarVisible &&
                 layoutState.activeActivity == ActivityBarItem.search,
             theme: theme,
-            onTap: () => layoutController.selectActivity(ActivityBarItem.search),
+            onTap: () =>
+                layoutController.selectActivity(ActivityBarItem.search),
           ),
           _buildItem(
             icon: Icons.alt_route_rounded,
             tooltip: 'Source Control (Ctrl+Shift+G)',
-            isSelected: layoutState.isSideBarVisible &&
+            isSelected:
+                layoutState.isSideBarVisible &&
                 layoutState.activeActivity == ActivityBarItem.sourceControl,
             theme: theme,
-            onTap: () => layoutController.selectActivity(ActivityBarItem.sourceControl),
+            onTap: () =>
+                layoutController.selectActivity(ActivityBarItem.sourceControl),
           ),
           _buildItem(
             icon: Icons.play_arrow_outlined,
             tooltip: 'Run and Debug (Ctrl+Shift+D)',
-            isSelected: layoutState.isSideBarVisible &&
+            isSelected:
+                layoutState.isSideBarVisible &&
                 layoutState.activeActivity == ActivityBarItem.runDebug,
             theme: theme,
-            onTap: () => layoutController.selectActivity(ActivityBarItem.runDebug),
+            onTap: () =>
+                layoutController.selectActivity(ActivityBarItem.runDebug),
           ),
           _buildItem(
             icon: Icons.grid_view_rounded,
             tooltip: 'Extensions (Ctrl+Shift+X)',
-            isSelected: layoutState.isSideBarVisible &&
+            isSelected:
+                layoutState.isSideBarVisible &&
                 layoutState.activeActivity == ActivityBarItem.extensions,
             theme: theme,
-            onTap: () => layoutController.selectActivity(ActivityBarItem.extensions),
+            onTap: () =>
+                layoutController.selectActivity(ActivityBarItem.extensions),
           ),
 
           const Spacer(),
@@ -79,10 +91,9 @@ class ActivityBarWidget extends StatelessWidget {
           _buildItem(
             icon: Icons.settings_outlined,
             tooltip: 'Manage Settings (Ctrl+,)',
-            isSelected: layoutState.isSideBarVisible &&
-                layoutState.activeActivity == ActivityBarItem.settings,
+            isSelected: false,
             theme: theme,
-            onTap: () => layoutController.selectActivity(ActivityBarItem.settings),
+            onTap: editorController.openSettingsTab,
           ),
           const SizedBox(height: 6),
         ],
@@ -115,16 +126,12 @@ class ActivityBarWidget extends StatelessWidget {
                   top: 8,
                   bottom: 8,
                   width: 2.5,
-                  child: Container(
-                    color: theme.activityBarActiveBorder,
-                  ),
+                  child: Container(color: theme.activityBarActiveBorder),
                 ),
               Icon(
                 icon,
                 size: EditorConstants.activityBarIconSize,
-                color: isSelected
-                    ? Colors.white
-                    : theme.activityBarForeground,
+                color: isSelected ? Colors.white : theme.activityBarForeground,
               ),
             ],
           ),

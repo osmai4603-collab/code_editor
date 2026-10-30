@@ -4,10 +4,12 @@ import 'package:flutter/services.dart';
 class IndentationTextChange {
   final String insertedText;
   final int removedLength;
+  final int startOffset;
 
   const IndentationTextChange({
     required this.insertedText,
     required this.removedLength,
+    required this.startOffset,
   });
 
   static IndentationTextChange? between(
@@ -24,6 +26,7 @@ class IndentationTextChange {
         return IndentationTextChange(
           insertedText: newText.substring(cursor, cursor + 1),
           removedLength: 0,
+          startOffset: cursor,
         );
       }
     }
@@ -46,6 +49,7 @@ class IndentationTextChange {
     return IndentationTextChange(
       insertedText: newText.substring(prefix, newEnd),
       removedLength: oldEnd - prefix,
+      startOffset: prefix,
     );
   }
 }

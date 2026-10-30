@@ -5,9 +5,12 @@ import 'indentation_service.dart';
 import 'indentation_syntax_context.dart';
 import 'indentation_text_change.dart';
 import 'language_indentation_rules.dart';
+import 'whitespace_only_line_backspace.dart';
 import '../../languages/definitions/built_in_languages.dart';
 
 class EditorInputFormatter extends TextInputFormatter {
+  static final _newlineInputPattern = RegExp(r'^\r?\n[ \t]*$');
+
   final EditorIndentationOptions options;
   final String languageId;
   final bool autoIndent;
@@ -47,6 +50,13 @@ class EditorInputFormatter extends TextInputFormatter {
     final change = IndentationTextChange.between(oldValue, newValue);
     if (change == null) return newValue;
     final inserted = change.insertedText;
+    final backspaceResult = joinWhitespaceOnlyLineOnBackspace(
+      oldValue,
+      oldSelection,
+      change,
+    );
+    if (backspaceResult != null) return backspaceResult;
+
     if (oldSelection.isCollapsed &&
         change.removedLength == 0 &&
         inserted.length == 1 &&
@@ -54,7 +64,7 @@ class EditorInputFormatter extends TextInputFormatter {
       onCharacterTyped?.call(inserted);
     }
 
-    if (inserted == '\n' && autoIndent) {
+    if (_newlineInputPattern.hasMatch(inserted) && autoIndent) {
       return _insertNewline(oldValue, oldSelection);
     }
     if (inserted.length != 1 || oldSelection.isCollapsed == false) {

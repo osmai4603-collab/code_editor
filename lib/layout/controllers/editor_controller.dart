@@ -67,6 +67,34 @@ class EditorDocumentsController extends ChangeNotifier {
     notifyListeners();
   }
 
+  void openSettingsTab({String? query, String? category}) {
+    final existingIndex = _tabs.indexWhere(
+      (tab) => tab.type == EditorTabType.settingsEditor,
+    );
+    if (existingIndex >= 0) {
+      final existing = _tabs[existingIndex];
+      _tabs[existingIndex] = existing.copyWith(
+        settingsQuery: query ?? existing.settingsQuery,
+        settingsCategory: category ?? existing.settingsCategory,
+      );
+      _activeTabIndex = existingIndex;
+    } else {
+      _tabs.add(
+        EditorTabItem(
+          id: 'settings',
+          title: 'Settings',
+          path: '',
+          content: '',
+          type: EditorTabType.settingsEditor,
+          settingsQuery: query,
+          settingsCategory: category,
+        ),
+      );
+      _activeTabIndex = _tabs.length - 1;
+    }
+    notifyListeners();
+  }
+
   void pinTab(String id) {
     final index = _tabs.indexWhere((tab) => tab.id == id);
     if (index == -1 || !_tabs[index].isPreview) return;

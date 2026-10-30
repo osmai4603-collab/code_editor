@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
 import 'models/status_bar_alignment.dart';
@@ -17,8 +16,7 @@ class StatusBarService extends ChangeNotifier {
   bool _isDisposed = false;
   bool _deferredNotifyScheduled = false;
 
-  StatusBarService({required StatusBarPreferencesStore preferencesStore})
-    : _preferencesStore = preferencesStore;
+  StatusBarService({required this._preferencesStore});
 
   Future<void> initialize() => _initialization ??= _loadPreferences();
 
@@ -36,6 +34,12 @@ class StatusBarService extends ChangeNotifier {
       );
       _hiddenEntryIds = {};
     }
+  }
+
+  Future<void> refreshPreferences() async {
+    _ensureNotDisposed();
+    _hiddenEntryIds = await _preferencesStore.readHiddenEntryIds();
+    notifyListeners();
   }
 
   @override

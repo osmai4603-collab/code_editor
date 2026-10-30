@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import '../../../../core/configuration/widgets/configuration_scope.dart';
 import '../../../../core/theme/editor_theme.dart';
+import '../../../../core/terminal/buffer/terminal_cursor.dart';
 import '../../../../core/terminal/services/terminal_config_service.dart';
 import '../../../../core/terminal/services/terminal_service.dart';
 import 'terminal_instance_view.dart';
@@ -48,6 +50,21 @@ class _TerminalTabbedViewState extends State<TerminalTabbedView> {
 
   @override
   Widget build(BuildContext context) {
+    final configuration = ConfigurationScope.of(context);
+    _config
+      ..fontSize = configuration
+          .getValue<int>('terminal.integrated.fontSize')
+          .toDouble()
+      ..fontFamily = configuration.getValue<String>(
+        'terminal.integrated.fontFamily',
+      )
+      ..cursorShape = switch (configuration.getValue<String>(
+        'terminal.integrated.cursorStyle',
+      )) {
+        'line' => CursorShape.bar,
+        'underline' => CursorShape.underline,
+        _ => CursorShape.block,
+      };
     final theme = EditorTheme.of(context);
     final instance = widget.terminalService.activeInstance;
     return Column(
