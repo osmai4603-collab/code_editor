@@ -51,6 +51,8 @@ class EditorLspExtension extends ChangeNotifier {
   }
 
   List<CompletionItem> get completions => _completions;
+  String get documentText => _documentText;
+  String get languageId => _currentTab?.languageId ?? 'plaintext';
   List<DecodedSemanticToken> get semanticTokens => _semanticTokens;
   HoverInfo? get hoverInfo => _hoverInfo;
   Offset? get popupPosition => _popupPosition;

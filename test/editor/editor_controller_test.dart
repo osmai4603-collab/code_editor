@@ -108,6 +108,25 @@ void main() {
     expect(controller.activeTab!.isDirty, isFalse);
   });
 
+  test('runs the tab save hook when saving an otherwise clean tab', () async {
+    final file = File('${tempDirectory.path}/clean.dart');
+    await file.writeAsString('original');
+    controller.openFile(
+      title: 'clean.dart',
+      path: file.path,
+      content: 'original',
+    );
+    final id = controller.activeTab!.id;
+    controller.setBeforeSaveHook(id, () async {
+      controller.updateContent(id, 'formatted');
+    });
+
+    await controller.saveCurrentTab();
+
+    expect(await file.readAsString(), 'formatted');
+    expect(controller.activeTab!.isDirty, isFalse);
+  });
+
   test('indentation preferences are retained with their open tab', () {
     controller.openFile(
       title: 'settings.dart',

@@ -4,32 +4,152 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+enum FormatOnSaveMode {
+  file,
+  modifications,
+  modificationsIfAvailable;
+
+  static FormatOnSaveMode fromJson(Object? value) {
+    if (value == null) return FormatOnSaveMode.file;
+    return FormatOnSaveMode.values.firstWhere(
+      (mode) => mode.name == value,
+      orElse: () => throw const FormatException(
+        'Invalid editor formatting preference: formatOnSaveMode',
+      ),
+    );
+  }
+}
+
+@immutable
+class EditorFormattingOverride {
+  final bool? formatOnSave;
+  final bool? formatOnType;
+  final bool? formatOnPaste;
+  final FormatOnSaveMode? formatOnSaveMode;
+  final String? defaultFormatter;
+
+  const EditorFormattingOverride({
+    this.formatOnSave,
+    this.formatOnType,
+    this.formatOnPaste,
+    this.formatOnSaveMode,
+    this.defaultFormatter,
+  });
+
+  @override
+  bool operator ==(Object other) =>
+      other is EditorFormattingOverride &&
+      formatOnSave == other.formatOnSave &&
+      formatOnType == other.formatOnType &&
+      formatOnPaste == other.formatOnPaste &&
+      formatOnSaveMode == other.formatOnSaveMode &&
+      defaultFormatter == other.defaultFormatter;
+
+  @override
+  int get hashCode => Object.hash(
+    formatOnSave,
+    formatOnType,
+    formatOnPaste,
+    formatOnSaveMode,
+    defaultFormatter,
+  );
+
+  Map<String, Object?> toJson() => {
+    if (formatOnSave != null) 'formatOnSave': formatOnSave,
+    if (formatOnType != null) 'formatOnType': formatOnType,
+    if (formatOnPaste != null) 'formatOnPaste': formatOnPaste,
+    if (formatOnSaveMode != null)
+      'formatOnSaveMode': formatOnSaveMode!.name,
+    if (defaultFormatter != null) 'defaultFormatter': defaultFormatter,
+  };
+
+  factory EditorFormattingOverride.fromJson(Map<String, dynamic> json) {
+    bool? readBool(String key) {
+      final value = json[key];
+      if (value == null) return null;
+      if (value is! bool) {
+        throw FormatException('Invalid editor formatting preference: $key');
+      }
+      return value;
+    }
+
+    final formatter = json['defaultFormatter'];
+    if (formatter != null && formatter is! String) {
+      throw const FormatException(
+        'Invalid editor formatting preference: defaultFormatter',
+      );
+    }
+
+    return EditorFormattingOverride(
+      formatOnSave: readBool('formatOnSave'),
+      formatOnType: readBool('formatOnType'),
+      formatOnPaste: readBool('formatOnPaste'),
+      formatOnSaveMode: json.containsKey('formatOnSaveMode')
+          ? FormatOnSaveMode.fromJson(json['formatOnSaveMode'])
+          : null,
+      defaultFormatter: formatter as String?,
+    );
+  }
+}
+
 @immutable
 class EditorFormattingPreferences {
   final bool formatOnSave;
   final bool formatOnType;
   final bool formatOnPaste;
+  final FormatOnSaveMode formatOnSaveMode;
+  final String? defaultFormatter;
+  final Map<String, EditorFormattingOverride> languageOverrides;
 
   const EditorFormattingPreferences({
     this.formatOnSave = false,
     this.formatOnType = false,
     this.formatOnPaste = false,
+    this.formatOnSaveMode = FormatOnSaveMode.file,
+    this.defaultFormatter,
+    this.languageOverrides = const {},
   });
 
   EditorFormattingPreferences copyWith({
     bool? formatOnSave,
     bool? formatOnType,
     bool? formatOnPaste,
+    FormatOnSaveMode? formatOnSaveMode,
+    String? defaultFormatter,
+    bool clearDefaultFormatter = false,
+    Map<String, EditorFormattingOverride>? languageOverrides,
   }) => EditorFormattingPreferences(
     formatOnSave: formatOnSave ?? this.formatOnSave,
     formatOnType: formatOnType ?? this.formatOnType,
     formatOnPaste: formatOnPaste ?? this.formatOnPaste,
+    formatOnSaveMode: formatOnSaveMode ?? this.formatOnSaveMode,
+    defaultFormatter: clearDefaultFormatter
+        ? null
+        : defaultFormatter ?? this.defaultFormatter,
+    languageOverrides: languageOverrides ?? this.languageOverrides,
   );
 
-  Map<String, Object> toJson() => {
+  EditorFormattingPreferences forLanguage(String languageId) {
+    final override = languageOverrides[languageId];
+    if (override == null) return this;
+    return copyWith(
+      formatOnSave: override.formatOnSave,
+      formatOnType: override.formatOnType,
+      formatOnPaste: override.formatOnPaste,
+      formatOnSaveMode: override.formatOnSaveMode,
+      defaultFormatter: override.defaultFormatter,
+    );
+  }
+
+  Map<String, Object?> toJson() => {
     'formatOnSave': formatOnSave,
     'formatOnType': formatOnType,
     'formatOnPaste': formatOnPaste,
+    'formatOnSaveMode': formatOnSaveMode.name,
+    if (defaultFormatter != null) 'defaultFormatter': defaultFormatter,
+    'languageOverrides': languageOverrides.map(
+      (language, override) => MapEntry(language, override.toJson()),
+    ),
   };
 
   factory EditorFormattingPreferences.fromJson(Map<String, dynamic> json) {
@@ -42,10 +162,37 @@ class EditorFormattingPreferences {
       return value;
     }
 
+    final formatter = json['defaultFormatter'];
+    if (formatter != null && formatter is! String) {
+      throw const FormatException(
+        'Invalid editor formatting preference: defaultFormatter',
+      );
+    }
+    final rawOverrides = json['languageOverrides'];
+    if (rawOverrides != null && rawOverrides is! Map<String, dynamic>) {
+      throw const FormatException(
+        'Invalid editor formatting preference: languageOverrides',
+      );
+    }
+    final overrides = <String, EditorFormattingOverride>{};
+    for (final entry in (rawOverrides as Map<String, dynamic>? ?? {}).entries) {
+      if (entry.value is! Map<String, dynamic>) {
+        throw FormatException(
+          'Invalid editor formatting preference: languageOverrides.${entry.key}',
+        );
+      }
+      overrides[entry.key] = EditorFormattingOverride.fromJson(
+        entry.value as Map<String, dynamic>,
+      );
+    }
+
     return EditorFormattingPreferences(
       formatOnSave: readBool('formatOnSave'),
       formatOnType: readBool('formatOnType'),
       formatOnPaste: readBool('formatOnPaste'),
+      formatOnSaveMode: FormatOnSaveMode.fromJson(json['formatOnSaveMode']),
+      defaultFormatter: formatter as String?,
+      languageOverrides: Map.unmodifiable(overrides),
     );
   }
 
@@ -54,10 +201,24 @@ class EditorFormattingPreferences {
       other is EditorFormattingPreferences &&
       formatOnSave == other.formatOnSave &&
       formatOnType == other.formatOnType &&
-      formatOnPaste == other.formatOnPaste;
+      formatOnPaste == other.formatOnPaste &&
+      formatOnSaveMode == other.formatOnSaveMode &&
+      defaultFormatter == other.defaultFormatter &&
+      mapEquals(languageOverrides, other.languageOverrides);
 
   @override
-  int get hashCode => Object.hash(formatOnSave, formatOnType, formatOnPaste);
+  int get hashCode => Object.hash(
+    formatOnSave,
+    formatOnType,
+    formatOnPaste,
+    formatOnSaveMode,
+    defaultFormatter,
+    Object.hashAllUnordered(
+      languageOverrides.entries.map(
+        (entry) => Object.hash(entry.key, entry.value),
+      ),
+    ),
+  );
 }
 
 abstract interface class EditorFormattingPreferencesStore {

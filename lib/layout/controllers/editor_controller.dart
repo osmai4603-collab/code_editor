@@ -145,7 +145,6 @@ class EditorDocumentsController extends ChangeNotifier {
   Future<void> saveTab(String id) async {
     var index = _tabs.indexWhere((tab) => tab.id == id);
     if (index == -1) return;
-    if (!_tabs[index].isDirty) return;
     await _beforeSaveHooks[id]?.call();
     index = _tabs.indexWhere((tab) => tab.id == id);
     if (index == -1) return;

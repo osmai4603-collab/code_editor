@@ -33,4 +33,40 @@ void main() {
     expect(controller.preferences.formatOnPaste, isTrue);
     expect(await store.read(), controller.preferences);
   });
+
+  test('round trips formatter selection and language-specific overrides', () {
+    const preferences = EditorFormattingPreferences(
+      formatOnSave: true,
+      formatOnSaveMode: FormatOnSaveMode.modificationsIfAvailable,
+      defaultFormatter: 'global-formatter',
+      languageOverrides: {
+        'dart': EditorFormattingOverride(
+          formatOnType: true,
+          defaultFormatter: 'dart-formatter',
+        ),
+      },
+    );
+
+    final restored = EditorFormattingPreferences.fromJson(
+      preferences.toJson(),
+    );
+
+    expect(restored, preferences);
+    expect(restored.forLanguage('dart').formatOnSave, isTrue);
+    expect(restored.forLanguage('dart').formatOnType, isTrue);
+    expect(restored.forLanguage('dart').defaultFormatter, 'dart-formatter');
+    expect(restored.forLanguage('python').defaultFormatter, 'global-formatter');
+  });
+
+  test('reads legacy preferences using the new file-mode default', () {
+    final preferences = EditorFormattingPreferences.fromJson({
+      'formatOnSave': true,
+      'formatOnType': false,
+      'formatOnPaste': false,
+    });
+
+    expect(preferences.formatOnSave, isTrue);
+    expect(preferences.formatOnSaveMode, FormatOnSaveMode.file);
+    expect(preferences.languageOverrides, isEmpty);
+  });
 }
