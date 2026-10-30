@@ -1,7 +1,10 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'execution_session.dart';
+import 'models/process_runner_interface.dart';
 import 'process_runner.dart';
+import 'resolvers/command_resolver.dart';
+import 'resolvers/composite_command_resolver.dart';
 
 /// متحكم نظام تشغيل وتنفيذ الأكواد (Execution Controller)
 ///
@@ -9,10 +12,20 @@ import 'process_runner.dart';
 class ExecutionController extends ChangeNotifier {
   static const maxHistoryLength = 50;
 
-  ProcessRunner? _currentRunner;
+  final IProcessRunner Function() _processRunnerFactory;
+  final ICommandResolver _commandResolver;
+  IProcessRunner? _currentRunner;
   ExecutionSession? _activeSession;
   final List<ExecutionSession> _history = [];
   int _nextSessionId = 0;
+
+  ExecutionController({
+    IProcessRunner Function()? processRunnerFactory,
+    ICommandResolver? commandResolver,
+  }) : _processRunnerFactory = processRunnerFactory ?? ProcessRunner.new,
+       _commandResolver =
+           commandResolver ??
+           CompositeCommandResolver([BuiltInCommandResolver()]);
 
   ExecutionSession? get activeSession => _activeSession;
   List<ExecutionSession> get history => List.unmodifiable(_history);
@@ -24,10 +37,10 @@ class ExecutionController extends ChangeNotifier {
       stopExecution();
     }
 
-    final executableAndArgs = _resolveCommandForFile(filePath);
+    final plan = _commandResolver.resolve(filePath);
     return executeCommand(
-      command: executableAndArgs.first,
-      args: executableAndArgs.sublist(1),
+      command: plan.executable,
+      args: plan.arguments,
       workingDirectory: workingDirectory ?? File(filePath).parent.path,
     );
   }
@@ -56,17 +69,18 @@ class ExecutionController extends ChangeNotifier {
     }
     notifyListeners();
 
-    final runner = ProcessRunner();
+    final runner = _processRunnerFactory();
     _currentRunner = runner;
 
-    final code = await runner.run(
-      session: session,
-      onOutput: () => notifyListeners(),
-    );
-
-    _currentRunner = null;
-    notifyListeners();
-    return code;
+    try {
+      return await runner.run(
+        session: session,
+        onOutput: () => notifyListeners(),
+      );
+    } finally {
+      if (identical(_currentRunner, runner)) _currentRunner = null;
+      notifyListeners();
+    }
   }
 
   /// إيقاف العملية النشطة
@@ -79,20 +93,5 @@ class ExecutionController extends ChangeNotifier {
   void clearOutput({ExecutionSession? session}) {
     (session ?? _activeSession)?.clearLines();
     notifyListeners();
-  }
-
-  List<String> _resolveCommandForFile(String filePath) {
-    if (filePath.endsWith('.dart')) {
-      const knownDart = '/home/osm/.development/flutter/bin/dart';
-      final cmd = File(knownDart).existsSync() ? knownDart : 'dart';
-      return [cmd, 'run', filePath];
-    } else if (filePath.endsWith('.py')) {
-      return ['python3', filePath];
-    } else if (filePath.endsWith('.sh')) {
-      return ['bash', filePath];
-    } else if (filePath.endsWith('.js')) {
-      return ['node', filePath];
-    }
-    return ['cat', filePath];
   }
 }

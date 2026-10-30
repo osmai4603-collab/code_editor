@@ -14,7 +14,6 @@ import '../../core/editor/indentation/indentation_service.dart';
 import '../../core/breadcrumbs/models/breadcrumb_symbol.dart';
 import '../../core/breadcrumbs/services/breadcrumb_symbol_path_service.dart';
 import '../../core/file_system/controllers/file_explorer_controller.dart';
-import '../../core/file_system/services/editor_file_opener.dart';
 import '../../core/file_system/services/file_system_service.dart';
 import '../../core/constants/editor_constants.dart';
 import '../../core/lsp/protocol/lsp_types.dart';
@@ -25,6 +24,7 @@ import '../../core/theme/editor_theme.dart';
 import '../../layout/controllers/editor_controller.dart';
 import '../../layout/controllers/layout_controller.dart';
 import '../../layout/controllers/lsp_and_execution_scope.dart';
+import '../../layout/services/editor_file_opener.dart';
 import '../../layout/models/layout_state.dart';
 import '../../models/editor_tab_item.dart';
 import 'controllers/code_editor_controller.dart';
@@ -1075,9 +1075,10 @@ class _CodeEditorSurfaceState extends State<_CodeEditorSurface> {
                         filePath: widget.tabItem.path,
                         workspacePath: widget.workspacePath,
                         listDirectory: fileExplorer.listDirectoryForNavigation,
-                        openFile: (path) => EditorFileOpener(
+                        openFile: (path) => EditorControllerFileOpener(
                           FileSystemService(),
-                        ).open(editor: documents, path: path),
+                          documents,
+                        ).open(path: path),
                         symbols: _lspExtension!.documentSymbols,
                         activeSymbols: activeSymbols,
                         symbolsLoading: _lspExtension!.documentSymbolsLoading,

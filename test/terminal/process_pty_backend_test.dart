@@ -9,6 +9,7 @@ void main() {
     'forwards interactive process input, output, and exit status',
     () async {
       final backend = ProcessPtyBackend();
+      expect(backend.supportsResize, isFalse);
       final output = StringBuffer();
       final outputReceived = Completer<void>();
       final outputSubscription = backend.onData.listen((data) {

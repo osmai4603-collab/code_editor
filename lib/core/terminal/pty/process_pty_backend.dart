@@ -106,6 +106,9 @@ class ProcessPtyBackend implements PtyBackend {
   }
 
   @override
+  bool get supportsResize => false;
+
+  @override
   void resize(int cols, int rows) {}
 
   @override

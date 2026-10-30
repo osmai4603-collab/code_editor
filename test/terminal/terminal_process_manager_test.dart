@@ -25,6 +25,9 @@ class _FakePtyBackend implements PtyBackend {
   bool get isRunning => _isRunning;
 
   @override
+  bool get supportsResize => true;
+
+  @override
   Future<void> start({
     required String executable,
     List<String> args = const [],

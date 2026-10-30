@@ -8,7 +8,6 @@ import '../../../core/file_system/models/sort_config.dart';
 import '../../../core/theme/editor_theme.dart';
 import '../../../layout/controllers/editor_controller.dart';
 import 'explorer_tree.dart';
-import 'widgets/explorer_search_bar.dart';
 import 'widgets/open_editors_list.dart';
 import 'widgets/section_header.dart';
 

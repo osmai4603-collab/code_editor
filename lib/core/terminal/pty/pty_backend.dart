@@ -12,6 +12,7 @@ abstract interface class PtyBackend {
   });
 
   void write(String data);
+  bool get supportsResize => false;
   void resize(int cols, int rows);
   void kill([ProcessSignal signal = ProcessSignal.sigterm]);
   Stream<String> get onData;

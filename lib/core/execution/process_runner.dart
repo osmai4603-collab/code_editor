@@ -2,15 +2,17 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'execution_session.dart';
+import 'models/process_runner_interface.dart';
 
 /// مشغل العمليات المستقل (Process Runner)
 ///
 /// ينفذ أوامر النظام والبرامج في عملية مستقلة، ويغذي جلسة التنفيذ بالمخرجات
-class ProcessRunner {
+class ProcessRunner implements IProcessRunner {
   Process? _activeProcess;
   bool _isTerminated = false;
 
   /// إطلاق العملية وربط تدفقات الدخل والخرج بالجلسة
+  @override
   Future<int> run({
     required ExecutionSession session,
     void Function()? onOutput,
@@ -64,6 +66,7 @@ class ProcessRunner {
   }
 
   /// إيقاف العملية النشطة قسراً
+  @override
   void kill() {
     if (_activeProcess != null) {
       _isTerminated = true;
@@ -76,5 +79,6 @@ class ProcessRunner {
     }
   }
 
+  @override
   bool get isRunning => _activeProcess != null;
 }

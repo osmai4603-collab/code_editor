@@ -1,8 +1,10 @@
 import 'dart:io';
 
+import '../../languages/definitions/built_in_languages.dart';
 import '../models/file_tree_item.dart';
 
 class FileSystemService {
+  static final _languageRegistry = createBuiltInLanguageRegistry();
   static const excludedDirectoryNames = {
     '.git',
     '.dart_tool',
@@ -138,25 +140,7 @@ class FileSystemService {
   }
 
   String resolveLanguageId(String filename) {
-    final lower = filename.toLowerCase();
-    if (lower.endsWith('.dart')) return 'dart';
-    if (lower.endsWith('.py')) return 'python';
-    if (lower.endsWith('.js') ||
-        lower.endsWith('.mjs') ||
-        lower.endsWith('.cjs')) {
-      return 'javascript';
-    }
-    if (lower.endsWith('.ts') || lower.endsWith('.tsx')) return 'typescript';
-    if (lower.endsWith('.json')) return 'json';
-    if (lower.endsWith('.yaml') || lower.endsWith('.yml')) return 'yaml';
-    if (lower.endsWith('.html') || lower.endsWith('.htm')) return 'html';
-    if (lower.endsWith('.css')) return 'css';
-    if (lower.endsWith('.md')) return 'markdown';
-    if (lower.endsWith('.sh')) return 'shellscript';
-    if (lower.endsWith('.xml')) return 'xml';
-    if (lower.endsWith('.sql')) return 'sql';
-    if (lower.endsWith('.gd')) return 'gdscript';
-    return 'plaintext';
+    return _languageRegistry.resolveLanguageId(filename);
   }
 
   Future<FileTreeItem> _itemFor(FileSystemEntity entity) async {

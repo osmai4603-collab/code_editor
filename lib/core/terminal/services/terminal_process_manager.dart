@@ -118,7 +118,9 @@ class TerminalProcessManager {
     final safeCols = cols.clamp(1, 500).toInt();
     final safeRows = rows.clamp(1, 200).toInt();
     state.resize(safeCols, safeRows);
-    _backend.resize(safeCols, safeRows);
+    if (_backend.supportsResize) {
+      _backend.resize(safeCols, safeRows);
+    }
     state.notify();
   }
 

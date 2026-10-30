@@ -1,6 +1,7 @@
 import 'package:code_editor/core/editor/indentation/editor_indentation_options.dart';
 import 'package:code_editor/core/editor/indentation/editor_input_formatter.dart';
 import 'package:code_editor/core/editor/indentation/indentation_service.dart';
+import 'package:code_editor/core/editor/indentation/language_indentation_rules.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -122,6 +123,36 @@ void main() {
       expect(result.text, 'if ready:\n  ');
     });
 
+    test('accepts injected language indentation rules', () {
+      final result =
+          EditorInputFormatter(
+            options: const EditorIndentationOptions(indentSize: 3),
+            languageId: 'plaintext',
+            indentationRules: const PythonIndentationRules(),
+          ).formatEditUpdate(
+            const TextEditingValue(
+              text: 'if ready:',
+              selection: TextSelection.collapsed(offset: 9),
+            ),
+            const TextEditingValue(
+              text: 'if ready:\n',
+              selection: TextSelection.collapsed(offset: 10),
+            ),
+          );
+
+      expect(result.text, 'if ready:\n   ');
+    });
+
+    test('indents nested class and function blocks only after Enter', () {
+      final result = type(
+        'class Example {\n  void run() {',
+        'class Example {\n  void run() {\n',
+        languageId: 'dart',
+      );
+
+      expect(result.text, 'class Example {\n  void run() {\n    ');
+    });
+
     test('inserts and skips closing brackets and wraps selected text', () {
       final pair = type('', '(');
       expect(pair.text, '()');
@@ -156,9 +187,9 @@ void main() {
       expect(wrapped.selection.extentOffset, 5);
     });
 
-    test('outdents when typing a closing brace on an indented blank line', () {
+    test('does not change indentation when typing a closing brace', () {
       final closing = type('{\n  ', '{\n  }');
-      expect(closing.text, '{\n}');
+      expect(closing.text, '{\n  }');
     });
 
     test('does not outdent for an unmatched closing bracket', () {

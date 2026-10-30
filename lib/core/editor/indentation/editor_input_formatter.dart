@@ -2,6 +2,10 @@ import 'package:flutter/services.dart';
 
 import 'editor_indentation_options.dart';
 import 'indentation_service.dart';
+import 'indentation_syntax_context.dart';
+import 'indentation_text_change.dart';
+import 'language_indentation_rules.dart';
+import '../../languages/definitions/built_in_languages.dart';
 
 class EditorInputFormatter extends TextInputFormatter {
   final EditorIndentationOptions options;
@@ -9,7 +13,11 @@ class EditorInputFormatter extends TextInputFormatter {
   final bool autoIndent;
   final bool autoClosingPairs;
   final void Function(String character)? onCharacterTyped;
+  final LanguageIndentationRules indentationRules;
   final IndentationService _indentationService;
+  late final IndentationSyntaxContext _syntaxContext = IndentationSyntaxContext(
+    languageId,
+  );
 
   EditorInputFormatter({
     required this.options,
@@ -17,8 +25,12 @@ class EditorInputFormatter extends TextInputFormatter {
     this.autoIndent = true,
     this.autoClosingPairs = true,
     this.onCharacterTyped,
+    LanguageIndentationRules? indentationRules,
     this._indentationService = const IndentationService(),
-  });
+  }) : indentationRules =
+           indentationRules ??
+           builtInLanguageDefinitionForId(languageId)?.indentationRules ??
+           const BracketIndentationRules();
 
   @override
   TextEditingValue formatEditUpdate(
@@ -32,7 +44,7 @@ class EditorInputFormatter extends TextInputFormatter {
       return newValue;
     }
 
-    final change = _singleChange(oldValue, newValue);
+    final change = IndentationTextChange.between(oldValue, newValue);
     if (change == null) return newValue;
     final inserted = change.insertedText;
     if (oldSelection.isCollapsed &&
@@ -67,33 +79,9 @@ class EditorInputFormatter extends TextInputFormatter {
       }
     }
 
-    if (autoClosingPairs &&
-        _isStructuralClosingPair(character) &&
-        _isCodeContext(oldValue.text, oldSelection.extentOffset)) {
-      final cursor = oldSelection.extentOffset;
-      final lineStart = _lineStart(oldValue.text, cursor);
-      final linePrefix = oldValue.text.substring(lineStart, cursor);
-      if (linePrefix.trim().isEmpty &&
-          _hasMatchingOpeningBracket(oldValue.text, cursor, character)) {
-        final indent = _indentationService.indentationOf(linePrefix);
-        final outdented = _removeOneIndent(indent);
-        final updated = oldValue.text.replaceRange(
-          lineStart,
-          cursor,
-          outdented + character,
-        );
-        return TextEditingValue(
-          text: updated,
-          selection: TextSelection.collapsed(
-            offset: lineStart + outdented.length + 1,
-          ),
-        );
-      }
-    }
-
     if (!autoClosingPairs ||
         !_isOpeningPair(character) ||
-        !_isCodeContext(oldValue.text, oldSelection.extentOffset)) {
+        !_syntaxContext.isCode(oldValue.text, oldSelection.extentOffset)) {
       return newValue;
     }
 
@@ -113,13 +101,13 @@ class EditorInputFormatter extends TextInputFormatter {
     final text = oldValue.text;
     final start = selection.start;
     final end = selection.end;
-    final lineStart = _lineStart(text, start);
+    final lineStart = _syntaxContext.lineStart(text, start);
     final linePrefix = text.substring(lineStart, start);
     final baseIndent = _indentationService.indentationOf(linePrefix);
     final previous = _lastNonWhitespace(linePrefix);
     final next = end < text.length ? text[end] : '';
 
-    final codeContext = _isCodeContext(text, start);
+    final codeContext = _syntaxContext.isCode(text, start);
     if (_matchingClosingPair(previous) == next &&
         next.isNotEmpty &&
         codeContext) {
@@ -134,12 +122,12 @@ class EditorInputFormatter extends TextInputFormatter {
     }
 
     var indent = baseIndent;
-    if (codeContext && _shouldIncreaseIndent(previous, linePrefix)) {
+    if (codeContext && _shouldIncreaseIndent(linePrefix)) {
       indent += options.indentUnit;
     } else if (codeContext &&
         linePrefix.trim().isEmpty &&
         _isStructuralClosingPair(next) &&
-        _hasMatchingOpeningBracket(text, start, next)) {
+        _syntaxContext.hasMatchingOpeningBracket(text, start, next)) {
       indent = _removeOneIndent(indent);
     }
 
@@ -170,37 +158,8 @@ class EditorInputFormatter extends TextInputFormatter {
     );
   }
 
-  bool _shouldIncreaseIndent(String previous, String linePrefix) =>
-      const {'{', '[', '('}.contains(previous) ||
-      (languageId.toLowerCase() == 'python' &&
-          linePrefix.trimRight().endsWith(':'));
-
-  bool _isCodeContext(String text, int cursor) {
-    final lineStart = _lineStart(text, cursor);
-    final prefix = text.substring(lineStart, cursor);
-    String? quote;
-    var escaped = false;
-    for (var index = 0; index < prefix.length; index++) {
-      final character = prefix[index];
-      if (quote != null) {
-        if (escaped) {
-          escaped = false;
-        } else if (character == r'\') {
-          escaped = true;
-        } else if (character == quote) {
-          quote = null;
-        }
-      } else if (character == '"' || character == "'" || character == '`') {
-        quote = character;
-      } else if (character == '#' ||
-          (character == '/' &&
-              index + 1 < prefix.length &&
-              prefix[index + 1] == '/')) {
-        return false;
-      }
-    }
-    return quote == null;
-  }
+  bool _shouldIncreaseIndent(String linePrefix) =>
+      indentationRules.shouldIndentAfterLine(linePrefix);
 
   String _lastNonWhitespace(String value) {
     for (var index = value.length - 1; index >= 0; index--) {
@@ -209,109 +168,14 @@ class EditorInputFormatter extends TextInputFormatter {
     return '';
   }
 
-  int _lineStart(String text, int offset) =>
-      offset <= 0 ? 0 : text.lastIndexOf('\n', offset - 1) + 1;
-
   bool _isOpeningPair(String character) =>
-      const {'(', '[', '{', '"', "'", '`'}.contains(character);
+      indentationRules.autoClosePairs.any((pair) => pair.startsWith(character));
 
   bool _isClosingPair(String character) =>
-      _isStructuralClosingPair(character) ||
-      const {'"', "'", '`'}.contains(character);
+      indentationRules.autoClosePairs.any((pair) => pair.endsWith(character));
 
   bool _isStructuralClosingPair(String character) =>
       const {')', ']', '}'}.contains(character);
-
-  bool _hasMatchingOpeningBracket(String text, int cursor, String closing) {
-    final opening = switch (closing) {
-      ')' => '(',
-      ']' => '[',
-      '}' => '{',
-      _ => '',
-    };
-    if (opening.isEmpty) return false;
-
-    final brackets = <String>[];
-    final normalizedLanguageId = languageId.toLowerCase();
-    final hasHashComments = const {
-      'python',
-      'gdscript',
-      'ruby',
-      'shellscript',
-      'yaml',
-      'toml',
-      'r',
-      'perl',
-    }.contains(normalizedLanguageId);
-    final hasSlashComments =
-        normalizedLanguageId != 'plaintext' && !hasHashComments;
-    String? quote;
-    var tripleQuote = false;
-    var escaped = false;
-    var lineComment = false;
-    var blockComment = false;
-    for (var index = 0; index < cursor; index++) {
-      final character = text[index];
-      final next = index + 1 < cursor ? text[index + 1] : '';
-
-      if (lineComment) {
-        if (character == '\n') lineComment = false;
-        continue;
-      }
-      if (blockComment) {
-        if (character == '*' && next == '/') {
-          blockComment = false;
-          index++;
-        }
-        continue;
-      }
-      if (quote != null) {
-        if (escaped) {
-          escaped = false;
-        } else if (character == r'\') {
-          escaped = true;
-        } else if (tripleQuote &&
-            character == quote &&
-            index + 2 < cursor &&
-            text[index + 1] == quote &&
-            text[index + 2] == quote) {
-          quote = null;
-          tripleQuote = false;
-          index += 2;
-        } else if (!tripleQuote && character == quote) {
-          quote = null;
-        }
-        continue;
-      }
-
-      if (hasSlashComments && character == '/' && next == '/') {
-        lineComment = true;
-        index++;
-      } else if (hasSlashComments && character == '/' && next == '*') {
-        blockComment = true;
-        index++;
-      } else if (hasHashComments && character == '#') {
-        lineComment = true;
-      } else if ((character == '"' || character == "'") &&
-          index + 2 < cursor &&
-          text[index + 1] == character &&
-          text[index + 2] == character) {
-        quote = character;
-        tripleQuote = true;
-        index += 2;
-      } else if (character == '"' || character == "'" || character == '`') {
-        quote = character;
-      } else if (const {'(', '[', '{'}.contains(character)) {
-        brackets.add(character);
-      } else if (_isStructuralClosingPair(character) &&
-          brackets.isNotEmpty &&
-          _matchingClosingPair(brackets.last) == character) {
-        brackets.removeLast();
-      }
-    }
-
-    return brackets.isNotEmpty && brackets.last == opening;
-  }
 
   String _removeOneIndent(String indent) {
     if (indent.endsWith('\t')) return indent.substring(0, indent.length - 1);
@@ -327,58 +191,10 @@ class EditorInputFormatter extends TextInputFormatter {
     _ => '',
   };
 
-  String _closingFor(String opening) => switch (opening) {
-    '(' => ')',
-    '[' => ']',
-    '{' => '}',
-    '"' => '"',
-    "'" => "'",
-    '`' => '`',
-    _ => '',
-  };
-
-  _TextChange? _singleChange(
-    TextEditingValue oldValue,
-    TextEditingValue newValue,
-  ) {
-    final oldText = oldValue.text;
-    final newText = newValue.text;
-    final cursor = oldValue.selection.extentOffset;
-    if (oldValue.selection.isCollapsed &&
-        newText.length == oldText.length + 1 &&
-        newText.startsWith(oldText.substring(0, cursor)) &&
-        newText.endsWith(oldText.substring(cursor))) {
-      return _TextChange(
-        insertedText: newText.substring(cursor, cursor + 1),
-        removedLength: 0,
-      );
+  String _closingFor(String opening) {
+    for (final pair in indentationRules.autoClosePairs) {
+      if (pair.startsWith(opening)) return pair.substring(opening.length);
     }
-
-    var prefix = 0;
-    final maxPrefix = oldText.length < newText.length
-        ? oldText.length
-        : newText.length;
-    while (prefix < maxPrefix && oldText[prefix] == newText[prefix]) {
-      prefix++;
-    }
-    var oldEnd = oldText.length;
-    var newEnd = newText.length;
-    while (oldEnd > prefix &&
-        newEnd > prefix &&
-        oldText[oldEnd - 1] == newText[newEnd - 1]) {
-      oldEnd--;
-      newEnd--;
-    }
-    return _TextChange(
-      insertedText: newText.substring(prefix, newEnd),
-      removedLength: oldEnd - prefix,
-    );
+    return '';
   }
-}
-
-class _TextChange {
-  final String insertedText;
-  final int removedLength;
-
-  const _TextChange({required this.insertedText, required this.removedLength});
 }

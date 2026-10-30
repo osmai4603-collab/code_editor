@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 
 import 'models/status_bar_alignment.dart';
 import 'models/status_bar_entry.dart';
@@ -14,6 +15,7 @@ class StatusBarService extends ChangeNotifier {
   Future<void> _writeQueue = Future<void>.value();
   int _nextInsertionOrder = 0;
   bool _isDisposed = false;
+  bool _deferredNotifyScheduled = false;
 
   StatusBarService({required StatusBarPreferencesStore preferencesStore})
     : _preferencesStore = preferencesStore;
@@ -34,6 +36,23 @@ class StatusBarService extends ChangeNotifier {
       );
       _hiddenEntryIds = {};
     }
+  }
+
+  @override
+  void notifyListeners() {
+    if (_isDisposed) return;
+    if (WidgetsBinding.instance.debugBuildingDirtyElements) {
+      if (_deferredNotifyScheduled) return;
+      _deferredNotifyScheduled = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _deferredNotifyScheduled = false;
+        if (!_isDisposed) {
+          super.notifyListeners();
+        }
+      });
+      return;
+    }
+    super.notifyListeners();
   }
 
   List<StatusBarEntry> get entries => List.unmodifiable(_orderedEntries);

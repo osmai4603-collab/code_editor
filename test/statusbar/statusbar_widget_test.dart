@@ -85,6 +85,43 @@ void main() {
     },
   );
 
+  testWidgets('defers status updates triggered while the tree is building', (
+    tester,
+  ) async {
+    var didAddEntry = false;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: EditorTheme(
+          theme: EditorThemeData.darkModern,
+          child: StatusBarScope(
+            notifier: statusBar,
+            child: Builder(
+              builder: (context) {
+                if (!didAddEntry) {
+                  didAddEntry = true;
+                  statusBar.addEntry(
+                    const StatusBarEntry(
+                      id: 'during-build',
+                      name: 'During build',
+                      text: 'ready',
+                      alignment: StatusBarAlignment.left,
+                      priority: 0,
+                    ),
+                  );
+                }
+                return const Scaffold(body: SizedBox());
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(tester.takeException(), isNull);
+    expect(statusBar.entries.any((entry) => entry.id == 'during-build'), isTrue);
+  });
+
   testWidgets('does not expose a passive status as a button', (tester) async {
     statusBar.addEntry(
       const StatusBarEntry(

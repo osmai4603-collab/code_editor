@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 
-import '../../../core/file_system/services/editor_file_opener.dart';
 import '../../../core/file_system/services/file_system_service.dart';
 import '../../../core/lsp/diagnostics/diagnostics_service.dart';
 import '../../../core/lsp/diagnostics/problems_view_model.dart';
 import '../../../core/lsp/protocol/lsp_types.dart';
 import '../../../core/theme/editor_theme.dart';
 import '../../../layout/controllers/editor_controller.dart';
+import '../../../layout/services/editor_file_opener.dart';
 import '../../../models/editor_tab_item.dart';
 
 class ProblemsView extends StatefulWidget {
@@ -477,9 +477,10 @@ class _ProblemsViewState extends State<ProblemsView> {
       if (existingTab != null) {
         documentsController.selectTab(existingTab.id);
       } else {
-        await EditorFileOpener(
+        await EditorControllerFileOpener(
           FileSystemService(),
-        ).open(editor: documentsController, path: path);
+          documentsController,
+        ).open(path: path);
       }
 
       if (!mounted) return;

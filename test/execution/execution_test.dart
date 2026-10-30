@@ -1,6 +1,28 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:code_editor/core/execution/execution_controller.dart';
 import 'package:code_editor/core/execution/execution_session.dart';
+import 'package:code_editor/core/execution/models/process_runner_interface.dart';
+
+class _FakeProcessRunner implements IProcessRunner {
+  ExecutionSession? receivedSession;
+
+  @override
+  bool get isRunning => false;
+
+  @override
+  void kill() {}
+
+  @override
+  Future<int> run({
+    required ExecutionSession session,
+    void Function()? onOutput,
+  }) async {
+    receivedSession = session;
+    session.addLine('fake output', OutputLineType.stdout);
+    onOutput?.call();
+    return 0;
+  }
+}
 
 void main() {
   group('Execution Subsystem Tests', () {
@@ -99,6 +121,25 @@ void main() {
 
       expect(first.lines, isEmpty);
       expect(second.lines, isNotEmpty);
+    });
+
+    test('injects process runners for unit testing file execution', () async {
+      final runner = _FakeProcessRunner();
+      final injectedController = ExecutionController(
+        processRunnerFactory: () => runner,
+      );
+      addTearDown(injectedController.dispose);
+
+      final code = await injectedController.runFile(
+        '/workspace/main.py',
+        workingDirectory: '/workspace',
+      );
+
+      expect(code, 0);
+      expect(runner.receivedSession?.command, 'python3');
+      expect(runner.receivedSession?.args, ['/workspace/main.py']);
+      expect(runner.receivedSession?.workingDirectory, '/workspace');
+      expect(runner.receivedSession?.lines.single.text, 'fake output');
     });
   });
 }
