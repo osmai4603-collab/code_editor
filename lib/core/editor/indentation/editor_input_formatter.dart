@@ -65,7 +65,7 @@ class EditorInputFormatter extends TextInputFormatter {
     }
 
     if (_newlineInputPattern.hasMatch(inserted) && autoIndent) {
-      return _insertNewline(oldValue, oldSelection);
+      return insertNewline(oldValue, oldSelection);
     }
     if (inserted.length != 1 || oldSelection.isCollapsed == false) {
       if (autoClosingPairs &&
@@ -104,7 +104,11 @@ class EditorInputFormatter extends TextInputFormatter {
     );
   }
 
-  TextEditingValue _insertNewline(
+  /// Computes the new [TextEditingValue] after inserting a newline with
+  /// auto-indentation at [selection]. This is public so the editor key handler
+  /// can call it directly on desktop platforms where Enter bypasses
+  /// [formatEditUpdate].
+  TextEditingValue insertNewline(
     TextEditingValue oldValue,
     TextSelection selection,
   ) {
@@ -118,6 +122,19 @@ class EditorInputFormatter extends TextInputFormatter {
     final next = end < text.length ? text[end] : '';
 
     final codeContext = _syntaxContext.isCode(text, start);
+    if (selection.isCollapsed &&
+        linePrefix.isEmpty &&
+        _isStructuralClosingPair(next) &&
+        codeContext &&
+        _syntaxContext.hasMatchingOpeningBracket(text, start, next)) {
+      final indent = _indentationBeforeLine(text, lineStart);
+      final updated = text.replaceRange(start, end, '$indent\n');
+      return TextEditingValue(
+        text: updated,
+        selection: TextSelection.collapsed(offset: start + indent.length),
+      );
+    }
+
     if (_matchingClosingPair(previous) == next &&
         next.isNotEmpty &&
         codeContext) {
@@ -170,6 +187,24 @@ class EditorInputFormatter extends TextInputFormatter {
 
   bool _shouldIncreaseIndent(String linePrefix) =>
       indentationRules.shouldIndentAfterLine(linePrefix);
+
+  String _indentationBeforeLine(String text, int lineStart) {
+    var lineEnd = lineStart - 1;
+    while (lineEnd >= 0) {
+      final previousLineStart = _syntaxContext.lineStart(text, lineEnd);
+      final previousLine = text.substring(previousLineStart, lineEnd);
+      if (previousLine.trim().isNotEmpty) {
+        var indent = _indentationService.indentationOf(previousLine);
+        if (_syntaxContext.isCode(text, lineEnd) &&
+            _shouldIncreaseIndent(previousLine)) {
+          indent += options.indentUnit;
+        }
+        return indent;
+      }
+      lineEnd = previousLineStart - 1;
+    }
+    return '';
+  }
 
   String _lastNonWhitespace(String value) {
     for (var index = value.length - 1; index >= 0; index--) {

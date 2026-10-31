@@ -1,9 +1,11 @@
 import 'package:code_editor/code_editor_app.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:code_editor/main.dart';
 import 'package:code_editor/layout/widgets/workbench_scaffold.dart';
 import 'package:code_editor/layout/controllers/layout_controller.dart';
+import 'package:code_editor/layout/controllers/editor_controller.dart';
 import 'package:code_editor/parts/titlebar/titlebar_widget.dart';
 import 'package:code_editor/parts/activitybar/activitybar_widget.dart';
 import 'package:code_editor/parts/sidebar/sidebar_widget.dart';
@@ -81,6 +83,101 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('No Editors Open'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Opening a file updates editor status after the build frame', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+
+    await tester.pumpWidget(
+      CodeEditorApp(
+        autoStartLsp: false,
+        statusBarPreferencesStore: InMemoryStatusBarPreferencesStore(),
+        formattingPreferencesStore: InMemoryEditorFormattingPreferencesStore(),
+        themePreferencesStore: InMemoryThemePreferencesStore(),
+        configurationService: createTestConfigurationService(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final editorContext = tester.element(find.byType(EditorAreaWidget));
+    EditorDocumentsScope.of(editorContext).openFile(
+      title: 'main.dart',
+      path: '/workspace/main.dart',
+      content: 'first line\nsecond line',
+      languageId: 'dart',
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Ln 1, Col 1'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Enter indents the new line and places the caret after it', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+
+    await tester.pumpWidget(
+      CodeEditorApp(
+        autoStartLsp: false,
+        statusBarPreferencesStore: InMemoryStatusBarPreferencesStore(),
+        formattingPreferencesStore: InMemoryEditorFormattingPreferencesStore(),
+        themePreferencesStore: InMemoryThemePreferencesStore(),
+        configurationService: createTestConfigurationService(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final editorContext = tester.element(find.byType(EditorAreaWidget));
+    EditorDocumentsScope.of(editorContext).openFile(
+      title: 'main.dart',
+      path: '/workspace/main.dart',
+      content:
+          'void main() {\n'
+          '  WidgetsFlutterBinding.ensureInitialized();\n'
+          '  runApp(const CodeEditorApp());\n'
+          '}',
+      languageId: 'dart',
+    );
+    await tester.pumpAndSettle();
+
+    final editableTextFinder = find.byType(EditableText).last;
+    await tester.tap(editableTextFinder);
+    await tester.pump();
+    final editableText = tester.widget<EditableText>(editableTextFinder);
+    final closingBraceOffset = editableText.controller.text.length - 1;
+    editableText.controller.selection = TextSelection.collapsed(
+      offset: closingBraceOffset,
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    await tester.pumpAndSettle();
+
+    const expectedText =
+        'void main() {\n'
+        '  WidgetsFlutterBinding.ensureInitialized();\n'
+        '  runApp(const CodeEditorApp());\n'
+        '  \n'
+        '}';
+    expect(editableText.controller.text, expectedText);
+    expect(
+      editableText.controller.selection,
+      TextSelection.collapsed(offset: expectedText.lastIndexOf('\n  \n}') + 3),
+    );
+    final editableState = tester.state<EditableTextState>(editableTextFinder);
+    final lineStart = editableState.renderEditable.getLocalRectForCaret(
+      TextPosition(offset: editableText.controller.text.lastIndexOf('\n') + 1),
+    );
+    final caret = editableState.renderEditable.getLocalRectForCaret(
+      TextPosition(offset: editableText.controller.selection.extentOffset),
+    );
+    expect(caret.left, greaterThan(lineStart.left));
     expect(tester.takeException(), isNull);
   });
 

@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:code_editor/core/editor/formatting/contracts/formatting_types.dart';
 import 'package:code_editor/parts/editor/scrollbar/editor_scrollbar.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import '../../core/editor/formatting/editor_formatting_preferences.dart';
 import '../../core/editor/formatting/editor_formatting_preferences_scope.dart';
@@ -12,6 +13,7 @@ import '../../core/editor/formatting/models/stable_editor_scroll_state.dart';
 import '../../core/editor/indentation/editor_indentation_options.dart';
 import '../../core/editor/indentation/editor_input_formatter.dart';
 import '../../core/editor/indentation/indentation_service.dart';
+import '../../core/editor/indentation/whitespace_only_line_backspace.dart';
 import '../../core/breadcrumbs/models/breadcrumb_symbol.dart';
 import '../../core/breadcrumbs/services/breadcrumb_symbol_path_service.dart';
 import '../../core/file_system/controllers/file_explorer_controller.dart';
@@ -365,6 +367,7 @@ class _CodeEditorSurfaceState extends State<_CodeEditorSurface> {
   final ScrollController _horizontalScroll = ScrollController();
   bool _isSynchronizingScroll = false;
   bool _scrollMetricsRefreshScheduled = false;
+  bool _editorStatusUpdateScheduled = false;
   bool _awaitingFormatSelectionChord = false;
   bool _pastePending = false;
   Timer? _pastePendingTimer;
@@ -635,6 +638,17 @@ class _CodeEditorSurfaceState extends State<_CodeEditorSurface> {
       .toList(growable: false);
 
   void _updateEditorStatus() {
+    if (WidgetsBinding.instance.schedulerPhase ==
+        SchedulerPhase.persistentCallbacks) {
+      if (_editorStatusUpdateScheduled) return;
+      _editorStatusUpdateScheduled = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _editorStatusUpdateScheduled = false;
+        if (mounted) _updateEditorStatus();
+      });
+      return;
+    }
+
     _editorStatusController?.update(
       widget.tabItem.id,
       _textController.text,
@@ -753,6 +767,39 @@ class _CodeEditorSurfaceState extends State<_CodeEditorSurface> {
         (keyboard.isControlPressed || keyboard.isMetaPressed)) {
       _awaitingFormatSelectionChord = true;
       return KeyEventResult.handled;
+    }
+    if ((event.logicalKey == LogicalKeyboardKey.enter ||
+            event.logicalKey == LogicalKeyboardKey.numpadEnter) &&
+        !keyboard.isControlPressed &&
+        !keyboard.isMetaPressed &&
+        !keyboard.isAltPressed) {
+      final value = _textController.value;
+      final selection = _textController.selection;
+      if (!selection.isValid || selection.end > value.text.length) {
+        return KeyEventResult.ignored;
+      }
+      final formatter = EditorInputFormatter(
+        options: _indentationOptions,
+        languageId: widget.tabItem.languageId,
+        onCharacterTyped: _handleCharacterTyped,
+      );
+      _textController.value = formatter.insertNewline(value, selection);
+      _syncLastUserInputText();
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.backspace &&
+        !keyboard.isControlPressed &&
+        !keyboard.isMetaPressed &&
+        !keyboard.isAltPressed) {
+      final joinedLine = removeWhitespaceOnlyLineOnBackspace(
+        _textController.value,
+        _textController.selection,
+      );
+      if (joinedLine != null) {
+        _textController.value = joinedLine;
+        _syncLastUserInputText();
+        return KeyEventResult.handled;
+      }
     }
     if (event.logicalKey == LogicalKeyboardKey.tab &&
         !keyboard.isControlPressed &&
@@ -1091,7 +1138,7 @@ class _CodeEditorSurfaceState extends State<_CodeEditorSurface> {
       _showEditorMessage('Unable to save formatting preferences: $error');
     }
   }
-
+  
   Future<void> _formatDocumentWith() async {
     final controller = _formattingController;
     if (controller == null) {

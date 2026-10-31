@@ -2,6 +2,7 @@ import 'package:code_editor/core/editor/indentation/editor_indentation_options.d
 import 'package:code_editor/core/editor/indentation/editor_input_formatter.dart';
 import 'package:code_editor/core/editor/indentation/indentation_service.dart';
 import 'package:code_editor/core/editor/indentation/language_indentation_rules.dart';
+import 'package:code_editor/core/editor/indentation/whitespace_only_line_backspace.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -293,6 +294,36 @@ void main() {
       expect(emptyLine.selection, const TextSelection.collapsed(offset: 6));
       expect(middleLine.text, 'before\nafter');
       expect(middleLine.selection, const TextSelection.collapsed(offset: 6));
+    });
+
+    test('Backspace on a whitespace-only line joins it at any column', () {
+      final middleLine = removeWhitespaceOnlyLineOnBackspace(
+        const TextEditingValue(
+          text: 'before\n    \nafter',
+          selection: TextSelection.collapsed(offset: 9),
+        ),
+        const TextSelection.collapsed(offset: 9),
+      );
+      final finalLine = removeWhitespaceOnlyLineOnBackspace(
+        const TextEditingValue(
+          text: 'before\r\n  ',
+          selection: TextSelection.collapsed(offset: 10),
+        ),
+        const TextSelection.collapsed(offset: 10),
+      );
+      final nonWhitespaceLine = removeWhitespaceOnlyLineOnBackspace(
+        const TextEditingValue(
+          text: 'before\n text',
+          selection: TextSelection.collapsed(offset: 10),
+        ),
+        const TextSelection.collapsed(offset: 10),
+      );
+
+      expect(middleLine?.text, 'before\nafter');
+      expect(middleLine?.selection, const TextSelection.collapsed(offset: 6));
+      expect(finalLine?.text, 'before');
+      expect(finalLine?.selection, const TextSelection.collapsed(offset: 6));
+      expect(nonWhitespaceLine, isNull);
     });
 
     testWidgets('caret advances after Enter on a whitespace-only line', (

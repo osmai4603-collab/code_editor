@@ -14,7 +14,20 @@ TextEditingValue? joinWhitespaceOnlyLineOnBackspace(
     return null;
   }
 
-  final text = oldValue.text;
+  return removeWhitespaceOnlyLineOnBackspace(oldValue, selection);
+}
+
+TextEditingValue? removeWhitespaceOnlyLineOnBackspace(
+  TextEditingValue value,
+  TextSelection selection,
+) {
+  if (!selection.isValid ||
+      !selection.isCollapsed ||
+      selection.extentOffset > value.text.length) {
+    return null;
+  }
+
+  final text = value.text;
   final lineStart = text.lastIndexOf('\n', selection.extentOffset - 1) + 1;
   if (lineStart == 0) return null;
   final lineEnd = text.indexOf('\n', lineStart);
